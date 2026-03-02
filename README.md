@@ -1,8 +1,12 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Pal-droid/Seanime-Android/main/images/seanime.png" alt="preview" width="70px"/>
+  <img src="https://raw.githubusercontent.com/Pal-droid/Seanime-Android/main/images/seanime.png" alt="preview" width="80px"/>
 </p>
 
 <h1 align="center">Seanime for Android</h1>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Pal-droid/Seanime-Android/main/images/preview.png" width="800"/>
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/STATUS-EARLY%20ALPHA-yellow?style=for-the-badge" />
