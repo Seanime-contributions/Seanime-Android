@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Dialog
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
@@ -30,6 +31,7 @@ class MainActivity : Activity() {
 
     private val retryCountMap = mutableMapOf<WebView, Int>()
     private val MAX_RETRIES = 5
+    private val REQUEST_CODE_NOTIFICATIONS = 101
 
     inner class OrientationBridge {
         @JavascriptInterface
@@ -56,11 +58,9 @@ class MainActivity : Activity() {
     private fun showDonateDialog() {
         val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
 
-        // Root dim overlay
         val root = FrameLayout(this)
         root.setBackgroundColor(Color.parseColor("#99000000"))
 
-        // Card container — bottom sheet
         val card = FrameLayout(this)
         card.setBackgroundColor(Color.TRANSPARENT)
 
@@ -71,14 +71,12 @@ class MainActivity : Activity() {
         cardLp.gravity = Gravity.BOTTOM
         card.layoutParams = cardLp
 
-        // Rounded top corners background
         val cardBg = GradientDrawable()
         cardBg.setColor(Color.parseColor("#0f0f14"))
         cardBg.cornerRadii = floatArrayOf(32f, 32f, 32f, 32f, 0f, 0f, 0f, 0f)
         cardBg.setStroke(1, Color.parseColor("#1a1a2e"))
         card.background = cardBg
 
-        // Drag handle
         val handle = View(this)
         val handleLp = FrameLayout.LayoutParams(120, 10)
         handleLp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -89,16 +87,11 @@ class MainActivity : Activity() {
         handleBg.cornerRadius = 99f
         handle.background = handleBg
 
-        // Top bar
         val topBar = FrameLayout(this)
-        val topBarLp = FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            160
-        )
+        val topBarLp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 160)
         topBarLp.topMargin = 48
         topBar.layoutParams = topBarLp
 
-        // Title
         val title = TextView(this)
         title.text = "Support Seanime"
         title.setTextColor(Color.WHITE)
@@ -111,7 +104,6 @@ class MainActivity : Activity() {
         titleLp.gravity = Gravity.CENTER
         title.layoutParams = titleLp
 
-        // Close button
         val closeBtn = TextView(this)
         closeBtn.text = "✕"
         closeBtn.setTextColor(Color.parseColor("#88ffffff"))
@@ -128,14 +120,12 @@ class MainActivity : Activity() {
         topBar.addView(title)
         topBar.addView(closeBtn)
 
-        // Divider
         val divider = View(this)
         val dividerLp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1)
         dividerLp.topMargin = 208
         divider.layoutParams = dividerLp
         divider.setBackgroundColor(Color.parseColor("#1affffff"))
 
-        // WebView
         val donateWebView = WebView(this)
         val wvLp = FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -151,7 +141,6 @@ class MainActivity : Activity() {
             useWideViewPort = true
         }
 
-        // Inject dark CSS to blend GitHub into the app theme
         donateWebView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
@@ -175,7 +164,6 @@ class MainActivity : Activity() {
         card.addView(donateWebView)
         root.addView(card)
 
-        // Tap outside to dismiss
         root.setOnClickListener { dialog.dismiss() }
         card.setOnClickListener { /* consume tap so root doesn't dismiss */ }
 
@@ -189,7 +177,6 @@ class MainActivity : Activity() {
             }
         }
 
-        // Slide up animation
         card.translationY = resources.displayMetrics.heightPixels.toFloat()
         dialog.show()
         card.animate()
@@ -203,11 +190,22 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         if (Build.VERSION.SDK_INT >= 33) {
-            requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 101)
+            requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), REQUEST_CODE_NOTIFICATIONS)
         }
 
         setupWebView()
         startSeanimeService()
+    }
+
+    // ← NEW: when the user grants notification permission, tell the already-running
+    // service to re-post its foreground notification so it appears without a restart.
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CODE_NOTIFICATIONS &&
+            grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+        ) {
+            sendBroadcast(Intent(SeanimeService.ACTION_NOTIFICATION_PERMISSION_GRANTED))
+        }
     }
 
     private fun startSeanimeService() {
