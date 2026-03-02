@@ -90,20 +90,49 @@ class PiPManager(private val activity: Activity, private val webView: WebView) {
                     let style = document.getElementById('pip-overlay-style') || document.createElement('style');
                     style.id = 'pip-overlay-style';
                     style.innerHTML = `
-                        body { background: black !important; }
-                        header, footer, nav, .UI-AppSidebar__sidebar, .UI-AppSidebarTrigger__trigger { 
-                            display: none !important; 
+                        body > *:not(video):not([id="pip-video-wrapper"]) {
+                            visibility: hidden !important;
+                            pointer-events: none !important;
+                        }
+                        body {
+                            background: black !important;
+                            overflow: hidden !important;
                         }
                         video {
                             position: fixed !important;
-                            top: 0 !important; left: 0 !important;
-                            width: 100vw !important; height: 100vh !important;
+                            top: 0 !important;
+                            left: 0 !important;
+                            width: 100vw !important;
+                            height: 100vh !important;
                             z-index: 2147483647 !important;
                             background: black !important;
                             object-fit: contain !important;
+                            visibility: visible !important;
                         }
                     `;
                     document.head.appendChild(style);
+
+                    // Reparent the active video to body so it's not hidden by the
+                    // "body > *:not(video)" rule that hides all other subtrees.
+                    const video = document.querySelector('video');
+                    if (video && video.parentElement !== document.body) {
+                        const wrapper = document.createElement('div');
+                        wrapper.id = 'pip-video-wrapper';
+                        wrapper.style.cssText = [
+                            'position:fixed',
+                            'inset:0',
+                            'z-index:2147483646',
+                            'background:black',
+                            'display:flex',
+                            'align-items:center',
+                            'justify-content:center'
+                        ].join(';');
+                        // Store a reference so we can restore later
+                        video.__pipOriginalParent = video.parentElement;
+                        video.__pipOriginalNextSibling = video.nextSibling;
+                        wrapper.appendChild(video);
+                        document.body.appendChild(wrapper);
+                    }
                 })();
             """.trimIndent(), null)
         } else {
@@ -111,9 +140,29 @@ class PiPManager(private val activity: Activity, private val webView: WebView) {
                 (function() {
                     window.__androidPiPActive = false;
                     
+                    // Restore video to its original position in the DOM
+                    const video = document.querySelector('video');
+                    if (video && video.__pipOriginalParent) {
+                        const origParent = video.__pipOriginalParent;
+                        const origNext = video.__pipOriginalNextSibling;
+                        if (origNext) {
+                            origParent.insertBefore(video, origNext);
+                        } else {
+                            origParent.appendChild(video);
+                        }
+                        delete video.__pipOriginalParent;
+                        delete video.__pipOriginalNextSibling;
+                    }
+
+                    // Remove the wrapper div
+                    const wrapper = document.getElementById('pip-video-wrapper');
+                    if (wrapper) wrapper.remove();
+
+                    // Remove PiP styles
                     const style = document.getElementById('pip-overlay-style');
                     if (style) style.remove();
                     
+                    // Restore pill
                     const pill = document.getElementById('android-floating-pill');
                     if (pill) pill.style.display = 'grid';
                     
