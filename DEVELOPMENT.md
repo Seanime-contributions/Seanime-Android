@@ -168,6 +168,9 @@ To build for other architectures, change `GOARCH` and place the binary in the co
 | ARM64 (most modern phones) | `arm64` | `jniLibs/arm64-v8a/` |
 | ARM 32-bit | `arm` + `GOARM=7` | `jniLibs/armeabi-v7a/` |
 
+> [!IMPORTANT]
+> Building for ARM 32-bit requires `CGO_ENABLED=1`
+
 Gradle will automatically bundle the right binary for each device at install time.
 
 ### 5. Build the APK
