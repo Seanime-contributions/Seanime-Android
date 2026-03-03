@@ -22,7 +22,6 @@ class SeanimeService : Service() {
     private val CHANNEL_ID = "seanime_channel"
     private val NOTIF_ID = 1
     private val ACTION_STOP_SERVICE = "STOP_SEANIME_SERVICE"
-    private val ACTION_NOTIFICATION_PERMISSION_GRANTED = "com.seanime.app.NOTIFICATION_PERMISSION_GRANTED"
     private lateinit var notificationManager: NotificationManager
     private var lastStatus: String = "Server is running"
     private var permissionReceiver: BroadcastReceiver? = null
@@ -35,32 +34,29 @@ class SeanimeService : Service() {
 
         notificationManager = getSystemService(NotificationManager::class.java)
         createNotificationChannel()
-        registerPermissionReceiver()
 
+        // Call startForeground immediately to satisfy Android's foreground service requirement,
+        // even before permission is granted — this prevents the ForegroundServiceDidNotStartInTimeException
+        promoteToForeground(lastStatus)
+
+        registerPermissionReceiver()
         createFakeResolvConf()
         startBinary()
-
-        updateNotification("Server is running")
 
         return START_STICKY
     }
 
-    /**
-     * Register a receiver that MainActivity can broadcast to after the user
-     * grants the POST_NOTIFICATIONS permission at runtime. When we receive it
-     * we simply re-post the notification so it appears without needing a restart.
-     */
     private fun registerPermissionReceiver() {
         if (permissionReceiver != null) return
         permissionReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 Log.d("SeanimeService", "Notification permission granted – retrying notification")
-                updateNotification(lastStatus)
+                promoteToForeground(lastStatus)
             }
         }
         val filter = IntentFilter(ACTION_NOTIFICATION_PERMISSION_GRANTED)
         if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(permissionReceiver, filter, 0x4) // Context.RECEIVER_NOT_EXPORTED = 0x4
+            registerReceiver(permissionReceiver, filter, 0x4) // RECEIVER_NOT_EXPORTED
         } else {
             registerReceiver(permissionReceiver, filter)
         }
@@ -76,19 +72,15 @@ class SeanimeService : Service() {
         }
     }
 
-    private fun updateNotification(status: String) {
-        lastStatus = status
-
+    private fun buildNotification(status: String): Notification {
         val stopIntent = Intent(this, SeanimeService::class.java).apply {
             action = ACTION_STOP_SERVICE
         }
-
         val pendingStopIntent = PendingIntent.getService(
             this, 0, stopIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-
-        val notification = Notification.Builder(this, CHANNEL_ID)
+        return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("Seanime")
             .setContentText(status)
             .setSmallIcon(R.mipmap.ic_launcher)
@@ -102,7 +94,11 @@ class SeanimeService : Service() {
                 ).build()
             )
             .build()
+    }
 
+    private fun promoteToForeground(status: String) {
+        lastStatus = status
+        val notification = buildNotification(status)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         } else {
@@ -114,7 +110,7 @@ class SeanimeService : Service() {
         try {
             val binaryPath = File(applicationInfo.nativeLibraryDir, "libseanime.so")
             if (!binaryPath.exists()) {
-                updateNotification("Error: Binary missing")
+                promoteToForeground("Error: Binary missing")
                 return
             }
 
@@ -133,14 +129,16 @@ class SeanimeService : Service() {
 
             Thread {
                 try {
-                    process?.inputStream?.bufferedReader()?.use { it.forEachLine { line -> Log.d("SeanimeLog", line) } }
+                    process?.inputStream?.bufferedReader()?.use { reader ->
+                        reader.forEachLine { line -> Log.d("SeanimeLog", line) }
+                    }
                 } catch (e: Exception) {
                     Log.e("SeanimeService", "Stream Error", e)
                 }
             }.start()
 
         } catch (e: Exception) {
-            updateNotification("Server failed to start")
+            promoteToForeground("Server failed to start")
         }
     }
 
