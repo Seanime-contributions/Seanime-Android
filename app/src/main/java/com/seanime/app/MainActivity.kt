@@ -33,6 +33,9 @@ class MainActivity : Activity() {
     private val MAX_RETRIES = 5
     private val REQUEST_CODE_NOTIFICATIONS = 101
 
+    /** The host that the main WebView serves — navigations to this host stay in-app. */
+    private val LOCAL_HOST = "127.0.0.1"
+
     inner class OrientationBridge {
         @JavascriptInterface
         fun setLandscape(landscape: Boolean) {
@@ -197,8 +200,6 @@ class MainActivity : Activity() {
         startSeanimeService()
     }
 
-    // ← NEW: when the user grants notification permission, tell the already-running
-    // service to re-post its foreground notification so it appears without a restart.
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_CODE_NOTIFICATIONS &&
@@ -234,6 +235,19 @@ class MainActivity : Activity() {
         }
 
         webView.webViewClient = object : WebViewClient() {
+
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val url = request?.url ?: return false
+                val host = url.host ?: return false
+
+                // Keep local Seanime traffic inside the main WebView
+                if (host == LOCAL_HOST) return false
+
+                // Everything else → custom popup bottom sheet
+                PopupWebViewSheet.show(this@MainActivity, url.toString())
+                return true
+            }
+
             override fun onReceivedError(view: WebView?, errorCode: Int, desc: String?, url: String?) {
                 if (view != null && url != null && url == view.url) {
                     retry(view)
@@ -247,11 +261,12 @@ class MainActivity : Activity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 if (view != null) retryCountMap[view] = 0
-                FloatingPill.inject(webView)
+                // FloatingPill removed
                 pipManager.injectHijacker()
                 DualModeManager.inject(webView)
                 VideoControlInjector.inject(webView)
                 UIPatches.inject(webView)
+                UIHomePatch.inject(webView)
             }
         }
 
