@@ -13,8 +13,12 @@ object VideoControlInjector {
 
             var HIDE_DELAY_MS = 3000;
             var hideTimer = null;
-            var patched = false;
-            var observersAttached = false;
+            var isScrubbing = false;
+
+            // Track the actual DOM nodes we've patched so we can detect replacements
+            var patchedContainer = null;
+            var patchedTopBar = null;
+            var patchedBottomBar = null;
 
             function isEntryRoute() {
                 var url = window.location.pathname + window.location.search;
@@ -26,6 +30,9 @@ object VideoControlInjector {
             }
             function getBottomBar() {
                 return document.querySelector('[data-vc-element="mobile-control-bar-bottom-section"]');
+            }
+            function getContainer() {
+                return document.querySelector('[data-vc-element="container"]');
             }
 
             function isHideTransform(transform) {
@@ -39,6 +46,8 @@ object VideoControlInjector {
                 var top = getTopBar();
                 var bot = getBottomBar();
                 if (!top || !bot) return;
+                top.__seanimeHidden = false;
+                bot.__seanimeHidden = false;
                 top.__seanimeOurControl = true;
                 bot.__seanimeOurControl = true;
                 top.style.transform = 'translateY(0px)';
@@ -46,9 +55,12 @@ object VideoControlInjector {
             }
 
             function hideBars() {
+                if (isScrubbing) return;
                 var top = getTopBar();
                 var bot = getBottomBar();
                 if (!top || !bot) return;
+                top.__seanimeHidden = true;
+                bot.__seanimeHidden = true;
                 top.__seanimeOurControl = true;
                 bot.__seanimeOurControl = true;
                 top.style.transform = 'translateY(-100%)';
@@ -57,79 +69,114 @@ object VideoControlInjector {
 
             function scheduleHide() {
                 clearTimeout(hideTimer);
-                hideTimer = setTimeout(function() {
-                    hideBars();
-                }, HIDE_DELAY_MS);
+                if (isScrubbing) return;
+                hideTimer = setTimeout(hideBars, HIDE_DELAY_MS);
+            }
+
+            function isProgressBarTarget(el) {
+                if (!el) return false;
+                var cur = el;
+                for (var i = 0; i < 6; i++) {
+                    if (!cur) break;
+                    var role = cur.getAttribute ? (cur.getAttribute('role') || '') : '';
+                    var dataVc = cur.getAttribute ? (cur.getAttribute('data-vc-element') || '') : '';
+                    if (dataVc === 'mobile-control-bar-bottom-section' ||
+                        dataVc === 'mobile-control-bar-top-section' ||
+                        dataVc === 'container') break;
+                    if (role === 'slider' || role === 'progressbar') return true;
+                    if (dataVc.indexOf('progress') !== -1 ||
+                        dataVc.indexOf('seek') !== -1 ||
+                        dataVc.indexOf('slider') !== -1) return true;
+                    var cls = (cur.className && typeof cur.className === 'string') ? cur.className : '';
+                    if (cls.indexOf('scrub') !== -1 || cls.indexOf('seek') !== -1) return true;
+                    if ((cur.tagName || '').toLowerCase() === 'input' &&
+                        cur.getAttribute('type') === 'range') return true;
+                    cur = cur.parentElement;
+                }
+                return false;
+            }
+
+            // Scrubbing listeners — attached once at document level, survive everything
+            var scrubbingListenersAttached = false;
+            function attachScrubbingListeners() {
+                if (scrubbingListenersAttached) return;
+                scrubbingListenersAttached = true;
+
+                function onScrubStart(e) {
+                    if (!isEntryRoute()) return;
+                    if (isProgressBarTarget(e.target)) {
+                        isScrubbing = true;
+                        clearTimeout(hideTimer);
+                        showBars();
+                    }
+                }
+                function onScrubEnd() {
+                    if (!isScrubbing) return;
+                    isScrubbing = false;
+                    scheduleHide();
+                }
+
+                document.addEventListener('pointerdown',   onScrubStart, { capture: true, passive: true });
+                document.addEventListener('touchstart',    onScrubStart, { capture: true, passive: true });
+                document.addEventListener('pointerup',     onScrubEnd,   { capture: true, passive: true });
+                document.addEventListener('pointercancel', onScrubEnd,   { capture: true, passive: true });
+                document.addEventListener('touchend',      onScrubEnd,   { capture: true, passive: true });
+                document.addEventListener('touchcancel',   onScrubEnd,   { capture: true, passive: true });
+            }
+
+            function watchBar(el, hideValue) {
+                new MutationObserver(function(mutations) {
+                    mutations.forEach(function(m) {
+                        if (m.attributeName !== 'style') return;
+                        if (!isEntryRoute()) return;
+                        if (el.__seanimeOurControl) {
+                            el.__seanimeOurControl = false;
+                            return;
+                        }
+                        // Player tried to mutate — restore our desired state
+                        el.__seanimeOurControl = true;
+                        el.style.transform = el.__seanimeHidden ? hideValue : 'translateY(0px)';
+                    });
+                }).observe(el, { attributes: true, attributeFilter: ['style'] });
             }
 
             function patchPlayer() {
                 if (!isEntryRoute()) return;
-                if (patched) return;
 
-                var topBar = getTopBar();
+                var topBar    = getTopBar();
                 var bottomBar = getBottomBar();
-                if (!topBar || !bottomBar) return;
+                var container = getContainer();
+                if (!topBar || !bottomBar || !container) return;
 
-                patched = true;
+                // Re-patch whenever DOM nodes are replaced (e.g. entering/leaving fullscreen)
+                var nodesReplaced = (topBar    !== patchedTopBar) ||
+                                    (bottomBar !== patchedBottomBar) ||
+                                    (container !== patchedContainer);
+                if (!nodesReplaced) return;
 
-                if (!observersAttached) {
-                    observersAttached = true;
+                patchedTopBar    = topBar;
+                patchedBottomBar = bottomBar;
+                patchedContainer = container;
 
-                    function watchBar(el, hideValue) {
-                        new MutationObserver(function(mutations) {
-                            mutations.forEach(function(m) {
-                                if (m.attributeName !== 'style') return;
-                                if (!isEntryRoute()) return;
-                                // If we set this ourselves, allow it and clear the flag
-                                if (el.__seanimeOurControl) {
-                                    el.__seanimeOurControl = false;
-                                    return;
-                                }
-                                // Otherwise the player tried to change visibility — revert it
-                                // to whatever our current desired state is
-                                el.__seanimeOurControl = true;
-                                el.style.transform = el.__seanimeHidden ? hideValue : 'translateY(0px)';
-                            });
-                        }).observe(el, { attributes: true, attributeFilter: ['style'] });
-                    }
+                // (Re-)attach style observers on the current bar nodes
+                watchBar(topBar,    'translateY(-100%)');
+                watchBar(bottomBar, 'translateY(100%)');
 
-                    watchBar(topBar, 'translateY(-100%)');
-                    watchBar(bottomBar, 'translateY(100%)');
+                // Init hidden flags on fresh nodes
+                if (!('__seanimeHidden' in topBar)) {
+                    Object.defineProperty(topBar, '__seanimeHidden',    { value: false, writable: true, configurable: true });
+                }
+                if (!('__seanimeHidden' in bottomBar)) {
+                    Object.defineProperty(bottomBar, '__seanimeHidden', { value: false, writable: true, configurable: true });
                 }
 
-                // Reflect hidden state on the element so the observer knows what to restore
-                Object.defineProperty(topBar, '__seanimeHidden', { value: false, writable: true, configurable: true });
-                Object.defineProperty(bottomBar, '__seanimeHidden', { value: false, writable: true, configurable: true });
-
-                // Override hideBars/showBars to also update __seanimeHidden
-                var _hideBars = hideBars;
-                hideBars = function() {
-                    var top = getTopBar();
-                    var bot = getBottomBar();
-                    if (top) top.__seanimeHidden = true;
-                    if (bot) bot.__seanimeHidden = true;
-                    _hideBars();
-                };
-                var _showBars = showBars;
-                showBars = function() {
-                    var top = getTopBar();
-                    var bot = getBottomBar();
-                    if (top) top.__seanimeHidden = false;
-                    if (bot) bot.__seanimeHidden = false;
-                    _showBars();
-                };
-
-                var container = document.querySelector('[data-vc-element="container"]');
-                if (!container || container.__seanimeClickPatched) return;
-                container.__seanimeClickPatched = true;
-
+                // Attach click listener on the current container node
                 container.addEventListener('click', function(e) {
                     if (!isEntryRoute()) return;
+                    if (isProgressBarTarget(e.target)) return;
 
                     var top = getTopBar();
-                    var bot = getBottomBar();
-                    if (!top || !bot) return;
-
+                    if (!top) return;
                     var currentlyVisible = !isHideTransform(top.style.transform);
 
                     if (currentlyVisible) {
@@ -142,32 +189,34 @@ object VideoControlInjector {
                     }
                 }, false);
 
-                // Start the initial hide timer
                 scheduleHide();
+            }
+
+            attachScrubbingListeners();
+
+            // Reset cached nodes on route change so patchPlayer re-runs fully
+            function onRouteChange() {
+                patchedContainer = null;
+                patchedTopBar    = null;
+                patchedBottomBar = null;
+                setTimeout(patchPlayer, 500);
             }
 
             var _pushState = history.pushState.bind(history);
             history.pushState = function() {
                 _pushState.apply(history, arguments);
-                patched = false;
-                observersAttached = false;
-                setTimeout(patchPlayer, 500);
+                onRouteChange();
             };
             var _replaceState = history.replaceState.bind(history);
             history.replaceState = function() {
                 _replaceState.apply(history, arguments);
-                patched = false;
-                observersAttached = false;
-                setTimeout(patchPlayer, 500);
+                onRouteChange();
             };
-            window.addEventListener('popstate', function() {
-                patched = false;
-                observersAttached = false;
-                setTimeout(patchPlayer, 500);
-            });
+            window.addEventListener('popstate', onRouteChange);
 
+            // MutationObserver catches fullscreen DOM swaps mid-route
             new MutationObserver(function() {
-                if (!patched) patchPlayer();
+                patchPlayer();
             }).observe(document.body, { childList: true, subtree: true });
 
             patchPlayer();
