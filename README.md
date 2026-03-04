@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Pal-droid/Seanime-Android/main/images/seanime.png" alt="preview" width="80px"/>
+  <img src="https://raw.githubusercontent.com/Pal-droid/Seanime-Android/main/images/seanime.png" width="80px"/>
 </p>
 
 <h1 align="center">Seanime for Android</h1>
