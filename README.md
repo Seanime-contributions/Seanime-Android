@@ -61,6 +61,13 @@
 
 ---
 
+
+### Other related projects (Made by me)
+
+- [Seanime Android](https://github.com/Pal-droid/seanime-android)
+
+---
+
 <h2 align="center">More info regarding the project</h2>
 <p align="center">
   <a href="https://github.com/5rahim/Seanime">Official Seanime repo</a>
