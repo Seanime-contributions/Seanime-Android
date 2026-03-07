@@ -61,7 +61,6 @@
 
 ---
 
-
 ### Other related projects (Made by me)
 
 - [Seanime Extensions](https://github.com/Pal-droid/seanime-providers)
