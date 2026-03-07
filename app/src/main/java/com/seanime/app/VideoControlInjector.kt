@@ -12,13 +12,18 @@ object VideoControlInjector {
             window.__seanimeControlPatchActive = true;
 
             var HIDE_DELAY_MS = 3000;
+            var DOUBLE_TAP_DELAY = 280;
             var hideTimer = null;
             var isScrubbing = false;
+            var firstPatch = true;
 
-            // Track the actual DOM nodes we've patched so we can detect replacements
             var patchedContainer = null;
             var patchedTopBar = null;
             var patchedBottomBar = null;
+
+            var lastClickTime = 0;
+            var lastClickSide = null;
+            var singleTapTimer = null;
 
             function isEntryRoute() {
                 var url = window.location.pathname + window.location.search;
@@ -33,6 +38,12 @@ object VideoControlInjector {
             }
             function getContainer() {
                 return document.querySelector('[data-vc-element="container"]');
+            }
+            function getVideo() {
+                return document.querySelector('video');
+            }
+            function getOverlayParent() {
+                return document.fullscreenElement || getContainer() || document.body;
             }
 
             function isHideTransform(transform) {
@@ -96,7 +107,105 @@ object VideoControlInjector {
                 return false;
             }
 
-            // Scrubbing listeners — attached once at document level, survive everything
+            // ── Seek animation ────────────────────────────────────────────────
+
+            function injectSeekStyles() {
+                if (document.getElementById('__seanime-seek-styles')) return;
+                var style = document.createElement('style');
+                style.id = '__seanime-seek-styles';
+                style.textContent = [
+                    '.__seanime-seek-overlay {',
+                    '  position: absolute;',
+                    '  top: 50%;',
+                    '  transform: translateY(-50%) scale(0.85);',
+                    '  width: 110px;',
+                    '  height: 190px;',
+                    '  display: flex;',
+                    '  flex-direction: column;',
+                    '  align-items: center;',
+                    '  justify-content: center;',
+                    '  pointer-events: none;',
+                    '  z-index: 99999;',
+                    '  background: rgba(255,255,255,0.18);',
+                    '  opacity: 0;',
+                    '  animation: __seanime-seek-pop 0.85s cubic-bezier(0.4,0,0.2,1) forwards;',
+                    '}',
+                    '.__seanime-seek-left  { left: 0;  border-radius: 0 999px 999px 0; }',
+                    '.__seanime-seek-right { right: 0; border-radius: 999px 0 0 999px; }',
+                    '@keyframes __seanime-seek-pop {',
+                    '  0%   { opacity: 0;   transform: translateY(-50%) scale(0.8);  }',
+                    '  18%  { opacity: 1;   transform: translateY(-50%) scale(1.05); }',
+                    '  30%  { opacity: 1;   transform: translateY(-50%) scale(1);    }',
+                    '  72%  { opacity: 1;   transform: translateY(-50%) scale(1);    }',
+                    '  100% { opacity: 0;   transform: translateY(-50%) scale(0.92); }',
+                    '}',
+                    '.__seanime-seek-arrows {',
+                    '  display: flex;',
+                    '  gap: 1px;',
+                    '  margin-bottom: 10px;',
+                    '}',
+                    '.__seanime-seek-arrow {',
+                    '  color: white;',
+                    '  font-size: 22px;',
+                    '  opacity: 0;',
+                    '  animation: __seanime-arrow-wave 0.55s ease forwards;',
+                    '}',
+                    '.__seanime-seek-arrow:nth-child(1) { animation-delay: 0.05s; }',
+                    '.__seanime-seek-arrow:nth-child(2) { animation-delay: 0.15s; }',
+                    '.__seanime-seek-arrow:nth-child(3) { animation-delay: 0.25s; }',
+                    '@keyframes __seanime-arrow-wave {',
+                    '  0%   { opacity: 0;   transform: scale(0.7); }',
+                    '  45%  { opacity: 1;   transform: scale(1.1); }',
+                    '  100% { opacity: 0.5; transform: scale(1);   }',
+                    '}',
+                    '.__seanime-seek-label {',
+                    '  color: white;',
+                    '  font-size: 13px;',
+                    '  font-weight: 700;',
+                    '  font-family: sans-serif;',
+                    '  text-shadow: 0 1px 4px rgba(0,0,0,0.5);',
+                    '  letter-spacing: 0.3px;',
+                    '}'
+                ].join('\n');
+                (document.head || document.documentElement).appendChild(style);
+            }
+
+            function showSeekAnimation(side) {
+                injectSeekStyles();
+                var existing = document.getElementById('__seanime-seek-anim');
+                if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+                var parent = getOverlayParent();
+                var ps = window.getComputedStyle(parent).position;
+                if (ps === 'static') parent.style.position = 'relative';
+
+                var el = document.createElement('div');
+                el.id = '__seanime-seek-anim';
+                el.className = '__seanime-seek-overlay __seanime-seek-' + side;
+
+                var arrow = side === 'right' ? '\u25B6' : '\u25C0';
+                el.innerHTML =
+                    '<div class="__seanime-seek-arrows">' +
+                        '<span class="__seanime-seek-arrow">' + arrow + '</span>' +
+                        '<span class="__seanime-seek-arrow">' + arrow + '</span>' +
+                        '<span class="__seanime-seek-arrow">' + arrow + '</span>' +
+                    '</div>' +
+                    '<div class="__seanime-seek-label">' + (side === 'right' ? '+10s' : '-10s') + '</div>';
+
+                parent.appendChild(el);
+                setTimeout(function() {
+                    if (el.parentNode) el.parentNode.removeChild(el);
+                }, 900);
+            }
+
+            function seekVideo(seconds) {
+                var video = getVideo();
+                if (!video) return;
+                video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + seconds));
+            }
+
+            // ── Listeners ─────────────────────────────────────────────────────
+
             var scrubbingListenersAttached = false;
             function attachScrubbingListeners() {
                 if (scrubbingListenersAttached) return;
@@ -124,6 +233,61 @@ object VideoControlInjector {
                 document.addEventListener('touchcancel',   onScrubEnd,   { capture: true, passive: true });
             }
 
+            var clickListenerAttached = false;
+            function attachClickListener() {
+                if (clickListenerAttached) return;
+                clickListenerAttached = true;
+
+                // Block dblclick entirely — prevents native fullscreen toggle
+                document.addEventListener('dblclick', function(e) {
+                    if (!isEntryRoute()) return;
+                    var container = getContainer();
+                    if (!container || !container.contains(e.target)) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                }, true);
+
+                document.addEventListener('click', function(e) {
+                    if (!isEntryRoute()) return;
+                    var container = getContainer();
+                    if (!container || !container.contains(e.target)) return;
+                    if (isProgressBarTarget(e.target)) return;
+
+                    var now = Date.now();
+                    var rect = container.getBoundingClientRect();
+                    var side = e.clientX < rect.left + rect.width / 2 ? 'left' : 'right';
+                    var isDouble = (now - lastClickTime) < DOUBLE_TAP_DELAY && side === lastClickSide;
+
+                    lastClickTime = now;
+                    lastClickSide = side;
+
+                    if (isDouble) {
+                        e.stopPropagation();
+                        clearTimeout(singleTapTimer);
+                        lastClickTime = 0;
+                        seekVideo(side === 'right' ? 10 : -10);
+                        showSeekAnimation(side);
+                        showBars();
+                        scheduleHide();
+                        return;
+                    }
+
+                    clearTimeout(singleTapTimer);
+                    singleTapTimer = setTimeout(function() {
+                        var top = getTopBar();
+                        if (!top) return;
+                        var currentlyVisible = !isHideTransform(top.style.transform);
+                        if (currentlyVisible) {
+                            scheduleHide();
+                        } else {
+                            showBars();
+                            scheduleHide();
+                        }
+                    }, DOUBLE_TAP_DELAY);
+
+                }, true);
+            }
+
             function watchBar(el, hideValue) {
                 new MutationObserver(function(mutations) {
                     mutations.forEach(function(m) {
@@ -133,7 +297,6 @@ object VideoControlInjector {
                             el.__seanimeOurControl = false;
                             return;
                         }
-                        // Player tried to mutate — restore our desired state
                         el.__seanimeOurControl = true;
                         el.style.transform = el.__seanimeHidden ? hideValue : 'translateY(0px)';
                     });
@@ -148,7 +311,6 @@ object VideoControlInjector {
                 var container = getContainer();
                 if (!topBar || !bottomBar || !container) return;
 
-                // Re-patch whenever DOM nodes are replaced (e.g. entering/leaving fullscreen)
                 var nodesReplaced = (topBar    !== patchedTopBar) ||
                                     (bottomBar !== patchedBottomBar) ||
                                     (container !== patchedContainer);
@@ -158,11 +320,9 @@ object VideoControlInjector {
                 patchedBottomBar = bottomBar;
                 patchedContainer = container;
 
-                // (Re-)attach style observers on the current bar nodes
                 watchBar(topBar,    'translateY(-100%)');
                 watchBar(bottomBar, 'translateY(100%)');
 
-                // Init hidden flags on fresh nodes
                 if (!('__seanimeHidden' in topBar)) {
                     Object.defineProperty(topBar, '__seanimeHidden',    { value: false, writable: true, configurable: true });
                 }
@@ -170,35 +330,20 @@ object VideoControlInjector {
                     Object.defineProperty(bottomBar, '__seanimeHidden', { value: false, writable: true, configurable: true });
                 }
 
-                // Attach click listener on the current container node
-                container.addEventListener('click', function(e) {
-                    if (!isEntryRoute()) return;
-                    if (isProgressBarTarget(e.target)) return;
-
-                    var top = getTopBar();
-                    if (!top) return;
-                    var currentlyVisible = !isHideTransform(top.style.transform);
-
-                    if (currentlyVisible) {
-                        scheduleHide();
-                    } else {
-                        setTimeout(function() {
-                            showBars();
-                            scheduleHide();
-                        }, 100);
-                    }
-                }, false);
-
-                scheduleHide();
+                if (firstPatch) {
+                    firstPatch = false;
+                    scheduleHide();
+                }
             }
 
             attachScrubbingListeners();
+            attachClickListener();
 
-            // Reset cached nodes on route change so patchPlayer re-runs fully
             function onRouteChange() {
                 patchedContainer = null;
                 patchedTopBar    = null;
                 patchedBottomBar = null;
+                firstPatch = true;
                 setTimeout(patchPlayer, 500);
             }
 
@@ -214,7 +359,6 @@ object VideoControlInjector {
             };
             window.addEventListener('popstate', onRouteChange);
 
-            // MutationObserver catches fullscreen DOM swaps mid-route
             new MutationObserver(function() {
                 patchPlayer();
             }).observe(document.body, { childList: true, subtree: true });
