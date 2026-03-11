@@ -1,18 +1,21 @@
 package com.seanime.app
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.webkit.*
 import android.widget.FrameLayout
+import android.widget.Toast
+import java.net.URISyntaxException
 
 class MainActivity : Activity() {
 
@@ -95,14 +98,41 @@ class MainActivity : Activity() {
         webView.webViewClient = object : WebViewClient() {
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                val url = request?.url ?: return false
-                val host = url.host ?: return false
+                val uri = request?.url ?: return false
+
+                // ========== HANDLE ANY INTENT:// SCHEME (for any media player) ==========
+                if (uri.scheme == "intent") {
+                    return try {
+                        val intent = Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME)
+                        // Try to start the intent – Android will resolve to the appropriate player
+                        startActivity(intent)
+                        true // handled
+                    } catch (e: URISyntaxException) {
+                        e.printStackTrace()
+                        true // prevent WebView from loading invalid URI
+                    } catch (e: ActivityNotFoundException) {
+                        // The app that can handle this intent is not installed
+                        val packageName = intent.`package`
+                        if (packageName != null) {
+                            // Redirect to the Play Store page for that specific app
+                            val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName"))
+                            startActivity(marketIntent)
+                        } else {
+                            // No package specified – show a user-friendly message
+                            Toast.makeText(this@MainActivity, "No app found to handle this link", Toast.LENGTH_SHORT).show()
+                        }
+                        true
+                    }
+                }
+
+                // ========== EXISTING HANDLING FOR OTHER URLS ==========
+                val host = uri.host ?: return false
 
                 // Keep local Seanime traffic inside the main WebView
                 if (host == LOCAL_HOST) return false
 
                 // Everything else → custom popup bottom sheet
-                PopupWebViewSheet.show(this@MainActivity, url.toString())
+                PopupWebViewSheet.show(this@MainActivity, uri.toString())
                 return true
             }
 
