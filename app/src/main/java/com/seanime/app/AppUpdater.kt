@@ -4,9 +4,7 @@ import android.Manifest
 import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.Dialog
-import android.app.PendingIntent
 import android.content.Intent
-import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
@@ -33,6 +31,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.regex.Pattern
 import kotlin.concurrent.thread
 
 object AppUpdater {
@@ -44,9 +43,10 @@ object AppUpdater {
     private lateinit var webView: WebView
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // Flag to remember if a download is pending after permission grant
+    // Flags for permission handling
     private var pendingDownloadAfterPermission = false
     private var pendingInstallAfterPermission = false
+    private var pendingCurrentVersion: String? = null // store version while waiting for permission
 
     fun init(activity: Activity, webView: WebView) {
         this.activity = activity
@@ -65,6 +65,18 @@ object AppUpdater {
                     style.id = '__seanime_appupdater_styles';
                     style.textContent = '@keyframes __sau_spin { to { transform: rotate(360deg); } }';
                     document.head.appendChild(style);
+                }
+
+                // Helper to get current version from the modal's H4
+                function getCurrentVersion() {
+                    var h4 = document.querySelector('h4.font-bold');
+                    if (h4) {
+                        var spans = h4.querySelectorAll('span');
+                        if (spans.length >= 1) {
+                            return spans[0].textContent.trim(); // first span = current version
+                        }
+                    }
+                    return null;
                 }
 
                 function findUpdateNowBtn() {
@@ -87,7 +99,8 @@ object AppUpdater {
                     clone.dataset.sauPatched = 'true';
                     clone.addEventListener('click', function(e) {
                         e.stopPropagation(); e.preventDefault();
-                        if (window.AppUpdater) window.AppUpdater.startUpdate();
+                        var currentVer = getCurrentVersion();
+                        if (window.AppUpdater) window.AppUpdater.startUpdate(currentVer);
                     });
                     btn.parentNode.replaceChild(clone, btn);
                 }
@@ -101,7 +114,8 @@ object AppUpdater {
                         e.stopPropagation(); e.preventDefault();
                         clone.disabled = true;
                         clone.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:__sau_spin 0.8s linear infinite;flex-shrink:0;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>';
-                        if (window.AppUpdater) window.AppUpdater.startDownload();
+                        var currentVer = getCurrentVersion(); // optional, not used for download
+                        if (window.AppUpdater) window.AppUpdater.startDownload(currentVer);
                     });
                     btn.parentNode.replaceChild(clone, btn);
                 }
@@ -118,38 +132,40 @@ object AppUpdater {
         webView.evaluateJavascript(js, null)
     }
 
-    // Call this from your Activity's onRequestPermissionsResult
     fun onRequestPermissionsResult(requestCode: Int, grantResults: IntArray) {
         if (requestCode == PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Permission granted, retry pending download/update
                 if (pendingDownloadAfterPermission) {
                     pendingDownloadAfterPermission = false
-                    Bridge.startDownload()
+                    Bridge.startDownload(pendingCurrentVersion)
                 } else if (pendingInstallAfterPermission) {
                     pendingInstallAfterPermission = false
-                    Bridge.startUpdate()
+                    Bridge.startUpdate(pendingCurrentVersion)
                 }
+                pendingCurrentVersion = null
             } else {
                 Toast.makeText(activity, "Storage permission denied. Cannot download to public folder.", Toast.LENGTH_LONG).show()
                 pendingDownloadAfterPermission = false
                 pendingInstallAfterPermission = false
+                pendingCurrentVersion = null
             }
         }
     }
 
     object Bridge {
         @JavascriptInterface
-        fun startUpdate() {
+        fun startUpdate(currentVersion: String?) {
             mainHandler.post {
-                // Check storage permission on old Android
                 if (!checkStoragePermission(installAfter = true)) {
                     pendingInstallAfterPermission = true
+                    pendingCurrentVersion = currentVersion
                     return@post
                 }
                 val dialog = showUpdatingDialog()
                 fetchAndDownload(
                     installAfter = true,
+                    currentVersion = currentVersion,
                     onComplete = {
                         mainHandler.post {
                             dialog.dismiss()
@@ -167,14 +183,16 @@ object AppUpdater {
         }
 
         @JavascriptInterface
-        fun startDownload() {
+        fun startDownload(currentVersion: String?) {
             mainHandler.post {
                 if (!checkStoragePermission(installAfter = false)) {
                     pendingDownloadAfterPermission = true
+                    pendingCurrentVersion = currentVersion
                     return@post
                 }
                 fetchAndDownload(
                     installAfter = false,
+                    currentVersion = currentVersion, // not used for download but passed for consistency
                     onComplete = {
                         mainHandler.post {
                             Toast.makeText(activity, "Download complete", Toast.LENGTH_SHORT).show()
@@ -206,10 +224,6 @@ object AppUpdater {
         }
     }
 
-    /**
-     * Check and request WRITE_EXTERNAL_STORAGE on Android < 10.
-     * Returns true if permission already granted (or not needed).
-     */
     private fun checkStoragePermission(installAfter: Boolean): Boolean {
         return if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -220,16 +234,14 @@ object AppUpdater {
                     false
                 }
             } else {
-                // Below Marshmallow, permission granted at install time
                 true
             }
         } else {
-            // Android 10+ doesn't need this permission
             true
         }
     }
 
-    private fun fetchAndDownload(installAfter: Boolean, onComplete: () -> Unit, onError: (String) -> Unit) {
+    private fun fetchAndDownload(installAfter: Boolean, currentVersion: String?, onComplete: () -> Unit, onError: (String) -> Unit) {
         thread {
             try {
                 // 1. Fetch releases list
@@ -248,13 +260,18 @@ object AppUpdater {
                 }
 
                 val latestRelease = releasesArray.getJSONObject(0)
+
+                // 2. Find APK asset and extract its version
                 val assets = latestRelease.getJSONArray("assets")
                 var apkUrl: String? = null
+                var apkVersion: String? = null
 
                 for (i in 0 until assets.length()) {
                     val asset = assets.getJSONObject(i)
-                    if (asset.getString("name").endsWith(".apk")) {
+                    val name = asset.getString("name")
+                    if (name.endsWith(".apk")) {
                         apkUrl = asset.getString("browser_download_url")
+                        apkVersion = extractVersionFromApkName(name)
                         break
                     }
                 }
@@ -264,7 +281,16 @@ object AppUpdater {
                     return@thread
                 }
 
-                // 2. Download the APK and save to public Downloads
+                // 3. Version check (only for updates)
+                if (installAfter) {
+                    val baseVersion = currentVersion ?: getCurrentVersionName()
+                    if (apkVersion == null || !isNewerVersion(baseVersion, apkVersion)) {
+                        onError("No updates available for Android yet, try again later")
+                        return@thread
+                    }
+                }
+
+                // 4. Download the APK
                 val dlConn = URL(apkUrl).openConnection() as HttpURLConnection
                 dlConn.setRequestProperty("User-Agent", "Seanime-App-Updater")
                 dlConn.instanceFollowRedirects = true
@@ -292,13 +318,41 @@ object AppUpdater {
         }
     }
 
-    /**
-     * Saves the APK to the public Downloads folder.
-     * Returns a content Uri (Android 10+) or a file Uri (older).
-     */
+    /** Extract version from APK filename (e.g., "seanime_v0.1.0a-s3.5.2.apk" → "3.5.2") */
+    private fun extractVersionFromApkName(name: String): String? {
+        // Look for pattern: s followed by digits and dots, ending before .apk
+        val pattern = Pattern.compile("s(\\d+\\.\\d+\\.\\d+)")
+        val matcher = pattern.matcher(name)
+        return if (matcher.find()) matcher.group(1) else null
+    }
+
+    private fun getCurrentVersionName(): String {
+        return try {
+            val pInfo = activity.packageManager.getPackageInfo(activity.packageName, 0)
+            pInfo.versionName ?: "0.0.0"
+        } catch (e: Exception) {
+            "0.0.0"
+        }
+    }
+
+    private fun isNewerVersion(currentVersion: String, latestVersion: String): Boolean {
+        val cleanCurrent = currentVersion.replace(Regex("^[^0-9]*"), "")
+        val cleanLatest = latestVersion.replace(Regex("^[^0-9]*"), "")
+
+        val currentParts = cleanCurrent.split('.').mapNotNull { it.toIntOrNull() }
+        val latestParts = cleanLatest.split('.').mapNotNull { it.toIntOrNull() }
+
+        for (i in 0 until maxOf(currentParts.size, latestParts.size)) {
+            val cur = if (i < currentParts.size) currentParts[i] else 0
+            val lat = if (i < latestParts.size) latestParts[i] else 0
+            if (lat > cur) return true
+            if (lat < cur) return false
+        }
+        return false
+    }
+
     private fun saveApkToDownloads(inputStream: java.io.InputStream, fileName: String): Uri? {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Android 10+ : Use MediaStore
             val contentValues = android.content.ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
                 put(MediaStore.MediaColumns.MIME_TYPE, "application/vnd.android.package-archive")
@@ -313,11 +367,8 @@ object AppUpdater {
             }
             uri
         } else {
-            // Android 9 and below : Legacy external storage
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            if (!downloadsDir.exists()) {
-                downloadsDir.mkdirs()
-            }
+            if (!downloadsDir.exists()) downloadsDir.mkdirs()
             val file = File(downloadsDir, fileName)
             FileOutputStream(file).use { outputStream ->
                 inputStream.copyTo(outputStream)
@@ -336,30 +387,16 @@ object AppUpdater {
             return
         }
 
+        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
         try {
-            val packageInstaller = activity.packageManager.packageInstaller
-            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-            val sessionId = packageInstaller.createSession(params)
-            val session = packageInstaller.openSession(sessionId)
-
-            session.openWrite("seanime_update", 0, -1).use { output ->
-                activity.contentResolver.openInputStream(uri)?.use { input ->
-                    input.copyTo(output)
-                    session.fsync(output)
-                } ?: throw Exception("Cannot open downloaded APK")
-            }
-
-            val intent = Intent(activity, activity.javaClass)
-            val pendingIntent = PendingIntent.getActivity(
-                activity, 0, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            session.commit(pendingIntent.intentSender)
-            session.close()
+            activity.startActivity(installIntent)
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(activity, "Install failed: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(activity, "Unable to launch installer: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -379,6 +416,7 @@ object AppUpdater {
     }
 
     private fun showUpdatingDialog(): Dialog {
+        // (unchanged, same as before)
         val dialog = Dialog(activity, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         dialog.setCancelable(false)
         val root = FrameLayout(activity).apply { setBackgroundColor(Color.parseColor("#99000000")) }
