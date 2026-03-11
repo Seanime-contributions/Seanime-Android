@@ -5,7 +5,12 @@ import android.webkit.WebView
 object VideoControlInjector {
 
     fun inject(view: WebView) {
-        // language=JavaScript
+        injectPlayerBehavior(view)
+    }
+
+    // ── Behavior (show/hide, double-tap seek) ─────────────────────────────────
+
+    private fun injectPlayerBehavior(view: WebView) {
         val js = """
         (function() {
             if (window.__seanimeControlPatchActive) return;
@@ -30,18 +35,10 @@ object VideoControlInjector {
                 return url.indexOf('/entry') !== -1 && url.indexOf('id=') !== -1;
             }
 
-            function getTopBar() {
-                return document.querySelector('[data-vc-element="mobile-control-bar-top-section"]');
-            }
-            function getBottomBar() {
-                return document.querySelector('[data-vc-element="mobile-control-bar-bottom-section"]');
-            }
-            function getContainer() {
-                return document.querySelector('[data-vc-element="container"]');
-            }
-            function getVideo() {
-                return document.querySelector('video');
-            }
+            function getTopBar()    { return document.querySelector('[data-vc-element="mobile-control-bar-top-section"]'); }
+            function getBottomBar() { return document.querySelector('[data-vc-element="mobile-control-bar-bottom-section"]'); }
+            function getContainer() { return document.querySelector('[data-vc-element="container"]'); }
+            function getVideo()     { return document.querySelector('video'); }
             function getOverlayParent() {
                 return document.fullscreenElement || getContainer() || document.body;
             }
@@ -54,26 +51,20 @@ object VideoControlInjector {
             }
 
             function showBars() {
-                var top = getTopBar();
-                var bot = getBottomBar();
+                var top = getTopBar(); var bot = getBottomBar();
                 if (!top || !bot) return;
-                top.__seanimeHidden = false;
-                bot.__seanimeHidden = false;
-                top.__seanimeOurControl = true;
-                bot.__seanimeOurControl = true;
+                top.__seanimeHidden = false; bot.__seanimeHidden = false;
+                top.__seanimeOurControl = true; bot.__seanimeOurControl = true;
                 top.style.transform = 'translateY(0px)';
                 bot.style.transform = 'translateY(0px)';
             }
 
             function hideBars() {
                 if (isScrubbing) return;
-                var top = getTopBar();
-                var bot = getBottomBar();
+                var top = getTopBar(); var bot = getBottomBar();
                 if (!top || !bot) return;
-                top.__seanimeHidden = true;
-                bot.__seanimeHidden = true;
-                top.__seanimeOurControl = true;
-                bot.__seanimeOurControl = true;
+                top.__seanimeHidden = true; bot.__seanimeHidden = true;
+                top.__seanimeOurControl = true; bot.__seanimeOurControl = true;
                 top.style.transform = 'translateY(-100%)';
                 bot.style.transform = 'translateY(100%)';
             }
@@ -89,7 +80,7 @@ object VideoControlInjector {
                 var cur = el;
                 for (var i = 0; i < 6; i++) {
                     if (!cur) break;
-                    var role = cur.getAttribute ? (cur.getAttribute('role') || '') : '';
+                    var role   = cur.getAttribute ? (cur.getAttribute('role') || '') : '';
                     var dataVc = cur.getAttribute ? (cur.getAttribute('data-vc-element') || '') : '';
                     if (dataVc === 'mobile-control-bar-bottom-section' ||
                         dataVc === 'mobile-control-bar-top-section' ||
@@ -97,7 +88,8 @@ object VideoControlInjector {
                     if (role === 'slider' || role === 'progressbar') return true;
                     if (dataVc.indexOf('progress') !== -1 ||
                         dataVc.indexOf('seek') !== -1 ||
-                        dataVc.indexOf('slider') !== -1) return true;
+                        dataVc.indexOf('slider') !== -1 ||
+                        dataVc === 'time-range') return true;
                     var cls = (cur.className && typeof cur.className === 'string') ? cur.className : '';
                     if (cls.indexOf('scrub') !== -1 || cls.indexOf('seek') !== -1) return true;
                     if ((cur.tagName || '').toLowerCase() === 'input' &&
@@ -115,17 +107,12 @@ object VideoControlInjector {
                 style.id = '__seanime-seek-styles';
                 style.textContent = [
                     '.__seanime-seek-overlay {',
-                    '  position: absolute;',
-                    '  top: 50%;',
+                    '  position: absolute; top: 50%;',
                     '  transform: translateY(-50%) scale(0.85);',
-                    '  width: 110px;',
-                    '  height: 190px;',
-                    '  display: flex;',
-                    '  flex-direction: column;',
-                    '  align-items: center;',
-                    '  justify-content: center;',
-                    '  pointer-events: none;',
-                    '  z-index: 99999;',
+                    '  width: 110px; height: 190px;',
+                    '  display: flex; flex-direction: column;',
+                    '  align-items: center; justify-content: center;',
+                    '  pointer-events: none; z-index: 99999;',
                     '  background: rgba(255,255,255,0.18);',
                     '  opacity: 0;',
                     '  animation: __seanime-seek-pop 0.85s cubic-bezier(0.4,0,0.2,1) forwards;',
@@ -139,15 +126,9 @@ object VideoControlInjector {
                     '  72%  { opacity: 1;   transform: translateY(-50%) scale(1);    }',
                     '  100% { opacity: 0;   transform: translateY(-50%) scale(0.92); }',
                     '}',
-                    '.__seanime-seek-arrows {',
-                    '  display: flex;',
-                    '  gap: 1px;',
-                    '  margin-bottom: 10px;',
-                    '}',
+                    '.__seanime-seek-arrows { display: flex; gap: 1px; margin-bottom: 10px; }',
                     '.__seanime-seek-arrow {',
-                    '  color: white;',
-                    '  font-size: 22px;',
-                    '  opacity: 0;',
+                    '  color: white; font-size: 22px; opacity: 0;',
                     '  animation: __seanime-arrow-wave 0.55s ease forwards;',
                     '}',
                     '.__seanime-seek-arrow:nth-child(1) { animation-delay: 0.05s; }',
@@ -159,11 +140,8 @@ object VideoControlInjector {
                     '  100% { opacity: 0.5; transform: scale(1);   }',
                     '}',
                     '.__seanime-seek-label {',
-                    '  color: white;',
-                    '  font-size: 13px;',
-                    '  font-weight: 700;',
-                    '  font-family: sans-serif;',
-                    '  text-shadow: 0 1px 4px rgba(0,0,0,0.5);',
+                    '  color: white; font-size: 13px; font-weight: 700;',
+                    '  font-family: sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,0.5);',
                     '  letter-spacing: 0.3px;',
                     '}'
                 ].join('\n');
@@ -182,7 +160,6 @@ object VideoControlInjector {
                 var el = document.createElement('div');
                 el.id = '__seanime-seek-anim';
                 el.className = '__seanime-seek-overlay __seanime-seek-' + side;
-
                 var arrow = side === 'right' ? '\u25B6' : '\u25C0';
                 el.innerHTML =
                     '<div class="__seanime-seek-arrows">' +
@@ -191,11 +168,8 @@ object VideoControlInjector {
                         '<span class="__seanime-seek-arrow">' + arrow + '</span>' +
                     '</div>' +
                     '<div class="__seanime-seek-label">' + (side === 'right' ? '+10s' : '-10s') + '</div>';
-
                 parent.appendChild(el);
-                setTimeout(function() {
-                    if (el.parentNode) el.parentNode.removeChild(el);
-                }, 900);
+                setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 900);
             }
 
             function seekVideo(seconds) {
@@ -204,7 +178,7 @@ object VideoControlInjector {
                 video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + seconds));
             }
 
-            // ── Listeners ─────────────────────────────────────────────────────
+            // ── Scrubbing listeners ───────────────────────────────────────────
 
             var scrubbingListenersAttached = false;
             function attachScrubbingListeners() {
@@ -233,12 +207,13 @@ object VideoControlInjector {
                 document.addEventListener('touchcancel',   onScrubEnd,   { capture: true, passive: true });
             }
 
+            // ── Tap / double-tap listener ─────────────────────────────────────
+
             var clickListenerAttached = false;
             function attachClickListener() {
                 if (clickListenerAttached) return;
                 clickListenerAttached = true;
 
-                // Block dblclick entirely — prevents native fullscreen toggle
                 document.addEventListener('dblclick', function(e) {
                     if (!isEntryRoute()) return;
                     var container = getContainer();
@@ -277,14 +252,9 @@ object VideoControlInjector {
                         var top = getTopBar();
                         if (!top) return;
                         var currentlyVisible = !isHideTransform(top.style.transform);
-                        if (currentlyVisible) {
-                            scheduleHide();
-                        } else {
-                            showBars();
-                            scheduleHide();
-                        }
+                        if (currentlyVisible) { scheduleHide(); }
+                        else { showBars(); scheduleHide(); }
                     }, DOUBLE_TAP_DELAY);
-
                 }, true);
             }
 
@@ -293,10 +263,7 @@ object VideoControlInjector {
                     mutations.forEach(function(m) {
                         if (m.attributeName !== 'style') return;
                         if (!isEntryRoute()) return;
-                        if (el.__seanimeOurControl) {
-                            el.__seanimeOurControl = false;
-                            return;
-                        }
+                        if (el.__seanimeOurControl) { el.__seanimeOurControl = false; return; }
                         el.__seanimeOurControl = true;
                         el.style.transform = el.__seanimeHidden ? hideValue : 'translateY(0px)';
                     });
@@ -305,7 +272,6 @@ object VideoControlInjector {
 
             function patchPlayer() {
                 if (!isEntryRoute()) return;
-
                 var topBar    = getTopBar();
                 var bottomBar = getBottomBar();
                 var container = getContainer();
@@ -323,17 +289,12 @@ object VideoControlInjector {
                 watchBar(topBar,    'translateY(-100%)');
                 watchBar(bottomBar, 'translateY(100%)');
 
-                if (!('__seanimeHidden' in topBar)) {
-                    Object.defineProperty(topBar, '__seanimeHidden',    { value: false, writable: true, configurable: true });
-                }
-                if (!('__seanimeHidden' in bottomBar)) {
+                if (!('__seanimeHidden' in topBar))
+                    Object.defineProperty(topBar,    '__seanimeHidden', { value: false, writable: true, configurable: true });
+                if (!('__seanimeHidden' in bottomBar))
                     Object.defineProperty(bottomBar, '__seanimeHidden', { value: false, writable: true, configurable: true });
-                }
 
-                if (firstPatch) {
-                    firstPatch = false;
-                    scheduleHide();
-                }
+                if (firstPatch) { firstPatch = false; scheduleHide(); }
             }
 
             attachScrubbingListeners();
@@ -348,21 +309,12 @@ object VideoControlInjector {
             }
 
             var _pushState = history.pushState.bind(history);
-            history.pushState = function() {
-                _pushState.apply(history, arguments);
-                onRouteChange();
-            };
+            history.pushState = function() { _pushState.apply(history, arguments); onRouteChange(); };
             var _replaceState = history.replaceState.bind(history);
-            history.replaceState = function() {
-                _replaceState.apply(history, arguments);
-                onRouteChange();
-            };
+            history.replaceState = function() { _replaceState.apply(history, arguments); onRouteChange(); };
             window.addEventListener('popstate', onRouteChange);
 
-            new MutationObserver(function() {
-                patchPlayer();
-            }).observe(document.body, { childList: true, subtree: true });
-
+            new MutationObserver(patchPlayer).observe(document.body, { childList: true, subtree: true });
             patchPlayer();
         })();
         """.trimIndent()
