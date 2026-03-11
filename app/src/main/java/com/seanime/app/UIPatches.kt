@@ -10,7 +10,7 @@ object UIPatches {
         UIMangaHomePatch.inject(webView)
         UIEntryPatch.inject(webView)
         UISettingsPatch.inject(webView)
-		UITorrentPatch.inject(webView)
+		      UITorrentPatch.inject(webView)
     }
 }
 
