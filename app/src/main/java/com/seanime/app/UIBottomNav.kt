@@ -337,9 +337,13 @@ object UIBottomNav {
                     return !!document.querySelector('[data-manga-reader-bar="true"]');
                 }
 
-                // ── Vaul drawer detection ─────────────────────────────────────
+                // ── Drawer detection (Vaul + UI-Drawer) ─────────────────────────
                 function isDrawerOpen() {
-                    return !!document.querySelector('[data-vaul-drawer][data-state="open"]');
+                    // Check for Vaul drawers
+                    if (document.querySelector('[data-vaul-drawer][data-state="open"]')) return true;
+                    // Check for UI-Drawer dialogs (playlists, etc)
+                    if (document.querySelector('.UI-Drawer__content[data-state="open"]')) return true;
+                    return false;
                 }
 
                 function updateNavVisibility() {
@@ -365,20 +369,20 @@ object UIBottomNav {
                     hideSidebarTriggers();
                 }
 
-                // ── Observe Vaul drawer data-state changes ────────────────────
-                // We watch the body for new [data-vaul-drawer] nodes being added,
-                // and also observe attribute mutations on any already-present ones.
+                // ── Observe drawer state changes ─────────────────────────────────
+                // Watch for both Vaul drawer and UI-Drawer elements
                 var drawerAttrObserver = new MutationObserver(function(mutations) {
                     mutations.forEach(function(mutation) {
                         if (mutation.attributeName === 'data-state' &&
-                            mutation.target.hasAttribute('data-vaul-drawer')) {
+                            (mutation.target.hasAttribute('data-vaul-drawer') ||
+                             mutation.target.classList.contains('UI-Drawer__content'))) {
                             updateNavVisibility();
                         }
                     });
                 });
 
                 function observeExistingDrawers() {
-                    document.querySelectorAll('[data-vaul-drawer]').forEach(function(drawer) {
+                    document.querySelectorAll('[data-vaul-drawer], .UI-Drawer__content').forEach(function(drawer) {
                         drawerAttrObserver.observe(drawer, { attributes: true, attributeFilter: ['data-state'] });
                     });
                 }
@@ -389,12 +393,12 @@ object UIBottomNav {
                     mutations.forEach(function(mutation) {
                         mutation.addedNodes.forEach(function(node) {
                             if (node.nodeType !== 1) return;
-                            if (node.hasAttribute('data-vaul-drawer')) {
+                            if (node.hasAttribute('data-vaul-drawer') || node.classList.contains('UI-Drawer__content')) {
                                 drawerAttrObserver.observe(node, { attributes: true, attributeFilter: ['data-state'] });
                                 needsCheck = true;
                             }
                             // Also catch drawers nested inside added subtrees.
-                            node.querySelectorAll && node.querySelectorAll('[data-vaul-drawer]').forEach(function(child) {
+                            node.querySelectorAll && node.querySelectorAll('[data-vaul-drawer], .UI-Drawer__content').forEach(function(child) {
                                 drawerAttrObserver.observe(child, { attributes: true, attributeFilter: ['data-state'] });
                                 needsCheck = true;
                             });
