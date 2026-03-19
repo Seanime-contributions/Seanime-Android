@@ -196,19 +196,18 @@ Open the project in **Android Studio** or **CodeAssist** (on-device) and build f
 
 | Feature | Status | Notes |
 |---|---|---|
-| Web UI | ✅ | Mobile-optimized via `SEA_PUBLIC_PLATFORM="mobile"` |
-| Torrent client | ✅ | Pure Go, works natively |
+| Web UI | ✅ | Mobile-optimized |
+| Torrent client | ➖️ | Untested |
 | SQLite database | ✅ | Pure Go SQLite (glebarez/sqlite) |
-| File scanner | ✅ | Works on internal storage |
+| File scanner | ✅️ | Works on internal storage |
 | AniList API / Extensions | ✅ | |
-| Online streaming playback | ✅ | HLS.js in WebView, mobile gestures supported |
-| Fullscreen | ✅️ | Fullscreen button is functional in WebView |
+| Online streaming playback | ✅ | Fully supported |
 | Torrent streaming | ✅️ | Via external player |
 | System tray | ✅️ | Partially implemented via Android notifications |
 | Discord RPC | ❌ | No named pipe IPC on Android |
 | Desktop notifications | ❌ | Could be added via Android notifications |
 | Verify ChromeDP works | ➖️ | Important, since some extensions rely on headless browser scraping |
-| Self-updater | ❌ | Manual APK update required |
+| Self-updater | ✅️ | Only looks for binary updates, not app updates |
 
 ---
 
