@@ -334,8 +334,7 @@ object UIBottomNav {
                 }
 
                 function isReaderOpen() {
-                    return /\/manga\/entry/.test(window.location.pathname) &&
-                        !!document.querySelector('[data-chapter-page-container="true"]');
+                    return !!document.querySelector('[data-manga-reader-bar="true"]');
                 }
 
                 // ── Vaul drawer detection ─────────────────────────────────────
