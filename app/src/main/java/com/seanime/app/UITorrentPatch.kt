@@ -96,6 +96,11 @@ object UITorrentPatch {
                     '  min-width: 0 !important;',
                     '  flex-shrink: 1 !important;',
                     '}',
+
+                    '[data-torrent-preview-item="true"][data-seanime-patched="true"] [data-torrent-preview-item-title="true"] [data-torrent-preview-item-confirmed-badge="true"] {',
+                    '  margin-left: 6px !important;',
+                    '  flex-shrink: 0 !important;',
+                    '}',
                     '  position: absolute !important;',
                     '  right: 0 !important;',
                     '  top: 0 !important;',
@@ -262,6 +267,8 @@ object UITorrentPatch {
                         Array.prototype.slice.call(titleEl.childNodes).forEach(function(node) {
                             if (node.nodeType === 3) nameSpan.appendChild(node);
                         });
+                        // Shorten "Episode N" → "Ep. N"
+                        nameSpan.textContent = nameSpan.textContent.replace(/\bEpisode\s+(\d)/g, 'Ep. ${'$'}1');
                         titleEl.insertBefore(nameSpan, titleEl.firstChild);
                     }
 
