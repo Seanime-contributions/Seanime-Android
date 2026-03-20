@@ -44,8 +44,6 @@ class PiPManager(private val activity: Activity, private val webView: WebView) {
                 window.__androidPiPActive = window.__androidPiPActive || false;
 
                 function hijackVideoControls() {
-                    if (!window.location.pathname.includes('/entry')) return;
-
                     const buttons = document.querySelectorAll('button[data-vc-element="control-button"]:not([data-pip-hijacked])');
                     
                     buttons.forEach(btn => {
@@ -90,48 +88,47 @@ class PiPManager(private val activity: Activity, private val webView: WebView) {
                     let style = document.getElementById('pip-overlay-style') || document.createElement('style');
                     style.id = 'pip-overlay-style';
                     style.innerHTML = `
-                        body > *:not(video):not([id="pip-video-wrapper"]) {
-                            visibility: hidden !important;
-                            pointer-events: none !important;
-                        }
-                        body {
+                        html, body {
+                            width: 100% !important;
+                            height: 100% !important;
+                            margin: 0 !important;
+                            padding: 0 !important;
                             background: black !important;
                             overflow: hidden !important;
+                        }
+                        body > *:not(video) {
+                            display: none !important;
+                            visibility: hidden !important;
+                            pointer-events: none !important;
                         }
                         video {
                             position: fixed !important;
                             top: 0 !important;
                             left: 0 !important;
-                            width: 100vw !important;
-                            height: 100vh !important;
-                            z-index: 2147483647 !important;
+                            width: 100% !important;
+                            height: 100% !important;
+                            object-fit: fill !important;
                             background: black !important;
-                            object-fit: contain !important;
+                            z-index: 9999999 !important;
+                            margin: 0 !important;
+                            padding: 0 !important;
+                            border: none !important;
                             visibility: visible !important;
                         }
                     `;
                     document.head.appendChild(style);
 
-                    // Reparent the active video to body so it's not hidden by the
-                    // "body > *:not(video)" rule that hides all other subtrees.
+                    // Move video directly to body
                     const video = document.querySelector('video');
-                    if (video && video.parentElement !== document.body) {
-                        const wrapper = document.createElement('div');
-                        wrapper.id = 'pip-video-wrapper';
-                        wrapper.style.cssText = [
-                            'position:fixed',
-                            'inset:0',
-                            'z-index:2147483646',
-                            'background:black',
-                            'display:flex',
-                            'align-items:center',
-                            'justify-content:center'
-                        ].join(';');
-                        // Store a reference so we can restore later
+                    if (video) {
+                        // Store original position
                         video.__pipOriginalParent = video.parentElement;
                         video.__pipOriginalNextSibling = video.nextSibling;
-                        wrapper.appendChild(video);
-                        document.body.appendChild(wrapper);
+                        
+                        // Move directly to body
+                        if (video.parentElement !== document.body) {
+                            document.body.appendChild(video);
+                        }
                     }
                 })();
             """.trimIndent(), null)
@@ -145,6 +142,10 @@ class PiPManager(private val activity: Activity, private val webView: WebView) {
                     if (video && video.__pipOriginalParent) {
                         const origParent = video.__pipOriginalParent;
                         const origNext = video.__pipOriginalNextSibling;
+                        
+                        // Clear all inline styles from video
+                        video.removeAttribute('style');
+                        
                         if (origNext) {
                             origParent.insertBefore(video, origNext);
                         } else {
@@ -154,19 +155,39 @@ class PiPManager(private val activity: Activity, private val webView: WebView) {
                         delete video.__pipOriginalNextSibling;
                     }
 
-                    // Remove the wrapper div
-                    const wrapper = document.getElementById('pip-video-wrapper');
-                    if (wrapper) wrapper.remove();
-
-                    // Remove PiP styles
+                    // Remove PiP styles completely
                     const style = document.getElementById('pip-overlay-style');
-                    if (style) style.remove();
+                    if (style) {
+                        style.innerHTML = '';
+                        style.remove();
+                    }
+                    
+                    // Force restore html and body to normal by removing inline styles
+                    document.documentElement.removeAttribute('style');
+                    document.body.removeAttribute('style');
                     
                     // Restore pill
                     const pill = document.getElementById('android-floating-pill');
-                    if (pill) pill.style.display = 'grid';
+                    if (pill) {
+                        pill.style.removeProperty('display');
+                        pill.style.display = 'grid';
+                    }
                     
-                    window.dispatchEvent(new Event('resize'));
+                    // Reset viewport zoom
+                    const viewport = document.querySelector('meta[name="viewport"]');
+                    if (viewport) {
+                        viewport.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
+                    }
+                    
+                    // Reset document scroll
+                    window.scrollTo(0, 0);
+                    document.documentElement.scrollTop = 0;
+                    document.body.scrollTop = 0;
+                    
+                    // Trigger layout recalculation after a small delay
+                    setTimeout(() => {
+                        window.dispatchEvent(new Event('resize'));
+                    }, 100);
                 })();
             """.trimIndent(), null)
         }

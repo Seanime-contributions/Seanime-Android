@@ -6,7 +6,7 @@ object UIHomePatch {
 
     fun inject(webView: WebView) {
         injectHomeStyles(webView)
-        injectCurrentlyWatchingCarousel(webView)
+        // Removed carousel and toggle injections
     }
 
     private fun injectHomeStyles(webView: WebView) {
@@ -21,9 +21,16 @@ object UIHomePatch {
                 [data-library-header-container="true"] {
                     height: 14rem !important;
                 }
+                /* Reduce banner bottom gradient/shadow height */
+                [data-library-header-banner-bottom-gradient="true"] {
+                    height: 8rem !important;
+                }
+                [data-layout-header-background-gradient="true"] {
+                    height: 4rem !important;
+                }
                 /* Compensate top padding containers that assume full banner height */
                 [data-library-toolbar-top-padding="true"].h-28 {
-                    height: 6rem !important;
+                    height: 4rem !important;
                 }
 
                 /* ── Top navbar: hide desktop nav links, keep the action icons ── */
@@ -96,91 +103,78 @@ object UIHomePatch {
                 [data-library-collection-list-item-header="true"] h2 {
                     font-size: 1.1rem !important;
                 }
+
+                /* ── Grid/Carousel transition animations ── */
+                [data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"] [data-media-card-grid="true"] {
+                    transition: opacity 0.3s ease !important;
+                }
+
+                /* Hide grid when not ready – enables fade out */
+                [data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"]:not([data-grid-ready]) [data-media-card-grid="true"] {
+                    opacity: 0 !important;
+                }
+
+                [data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"][data-view-mode="grid"][data-grid-ready="true"] [data-media-card-grid="true"] {
+                    opacity: 1 !important;
+                }
+
+                [data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"][data-view-mode="carousel"][data-grid-ready="true"] [data-media-card-grid="true"] {
+                    opacity: 1 !important;
+                }
+
+                /* ── Grid view styles - force 2 columns ── */
+                [data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"][data-view-mode="grid"] [data-media-card-grid="true"] {
+                    display: grid !important;
+                    grid-template-columns: repeat(2, 1fr) !important;
+                    gap: 0.65rem !important;
+                    padding: 0.25rem 1rem 1rem 1rem !important;
+                    overflow: visible !important;
+                    flex-direction: unset !important;
+                    flex-wrap: unset !important;
+                    scroll-snap-type: unset !important;
+                    -webkit-overflow-scrolling: unset !important;
+                }
+
+                [data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"][data-view-mode="grid"] [data-media-entry-card-container="true"] {
+                    flex: unset !important;
+                    flex-basis: unset !important;
+                    width: 100% !important;
+                    max-width: unset !important;
+                    scroll-snap-align: unset !important;
+                }
+
+                /* ── View toggle button - only show background in grid mode ── */
+                #__seanime_cw_view_toggle {
+                    background-color: transparent !important;
+                    transition: background-color 0.3s ease !important;
+                }
+
+                #__seanime_cw_view_toggle:hover {
+                    background-color: rgba(255, 255, 255, 0.15) !important;
+                }
+
+                #__seanime_cw_view_toggle:active {
+                    background-color: rgba(255, 255, 255, 0.25) !important;
+                }
+
+                #__seanime_cw_view_toggle[data-view-mode="grid"] {
+                    background-color: rgba(255, 255, 255, 0.2) !important;
+                }
+
+                #__seanime_cw_view_toggle[data-view-mode="grid"]:hover {
+                    background-color: rgba(255, 255, 255, 0.3) !important;
+                }
+
+                #__seanime_cw_view_toggle[data-view-mode="grid"]:active {
+                    background-color: rgba(255, 255, 255, 0.35) !important;
+                }
+
+                #__seanime_cw_view_toggle svg {
+                    width: 20px;
+                    height: 20px;
+                }
             `;
             document.head.appendChild(s);
-        })();
-        """.trimIndent()
-        webView.evaluateJavascript(js, null)
-    }
-
-    private fun injectCurrentlyWatchingCarousel(webView: WebView) {
-        val js = """
-        (function() {
-            if (window.__seanime_cw_carousel_init) return;
-            window.__seanime_cw_carousel_init = true;
-
-            function applyCarousel() {
-                var section = document.querySelector('[data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"]');
-                if (!section || section.dataset.carouselized) return;
-                section.dataset.carouselized = 'true';
-
-                var grid = section.querySelector('[data-media-card-grid="true"]');
-                if (!grid) return;
-
-                grid.style.cssText += [
-                    'display:flex',
-                    'flex-direction:row',
-                    'flex-wrap:nowrap',
-                    'overflow-x:auto',
-                    'overflow-y:visible',
-                    'gap:0.65rem',
-                    'padding:0.25rem 1rem 1rem 1rem',
-                    'scroll-snap-type:x mandatory',
-                    '-webkit-overflow-scrolling:touch',
-                    'scrollbar-width:none'
-                ].join(';');
-
-                if (!document.getElementById('__seanime_cw_carousel_sb')) {
-                    var sb = document.createElement('style');
-                    sb.id = '__seanime_cw_carousel_sb';
-                    sb.textContent = '[data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"] [data-media-card-grid="true"]::-webkit-scrollbar{display:none!important;}';
-                    document.head.appendChild(sb);
-                }
-
-                grid.querySelectorAll('[data-media-entry-card-container="true"]').forEach(function(card) {
-                    card.style.cssText += [
-                        'flex:0 0 42vw',
-                        'max-width:42vw',
-                        'scroll-snap-align:start',
-                        'width:42vw'
-                    ].join(';');
-                });
-            }
-
-            applyCarousel();
-
-            new MutationObserver(function() {
-                var section = document.querySelector('[data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"]');
-                if (!section) return;
-                if (!section.dataset.carouselized) {
-                    window.__seanime_cw_carousel_init = false;
-                    window.__seanime_cw_carousel_init = true;
-                    applyCarousel();
-                    return;
-                }
-                var grid = section.querySelector('[data-media-card-grid="true"]');
-                if (!grid) return;
-                grid.querySelectorAll('[data-media-entry-card-container="true"]').forEach(function(card) {
-                    if (!card.style.flexBasis) {
-                        card.style.cssText += [
-                            'flex:0 0 42vw',
-                            'max-width:42vw',
-                            'scroll-snap-align:start',
-                            'width:42vw'
-                        ].join(';');
-                    }
-                });
-            }).observe(document.body, { childList: true, subtree: true });
-
-            var _pushState = history.pushState.bind(history);
-            history.pushState = function() {
-                _pushState.apply(history, arguments);
-                window.__seanime_cw_carousel_init = false;
-                setTimeout(function() {
-                    window.__seanime_cw_carousel_init = true;
-                    applyCarousel();
-                }, 400);
-            };
         })();
         """.trimIndent()
         webView.evaluateJavascript(js, null)

@@ -47,6 +47,24 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // ── Edge-to-edge: draw behind status bar + navigation bar ──────────
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(false)
+        }
+        
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        )
+        // ───────────────────────────────────────────────────────────────────
+
         if (Build.VERSION.SDK_INT >= 33) {
             requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), REQUEST_CODE_NOTIFICATIONS)
         }
@@ -58,10 +76,8 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-        // Forward to AppUpdater (handles WRITE_EXTERNAL_STORAGE permission for older Androids)
         AppUpdater.onRequestPermissionsResult(requestCode, grantResults)
 
-        // Handle notification permission (existing)
         if (requestCode == REQUEST_CODE_NOTIFICATIONS &&
             grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
         ) {
@@ -77,6 +93,18 @@ class MainActivity : Activity() {
     private fun setupWebView() {
         webView = WebView(this)
         setContentView(webView)
+
+        // ── Forward system bar insets to the WebView / JS patch system ─────
+        webView.setOnApplyWindowInsetsListener { view, insets ->
+            val top = insets.systemWindowInsetTop
+            val bottom = insets.systemWindowInsetBottom
+            val left = insets.systemWindowInsetLeft
+            val right = insets.systemWindowInsetRight
+            val js = "window.__seanimeInsets = { top: $top, bottom: $bottom, left: $left, right: $right };"
+            view.post { (view as? WebView)?.evaluateJavascript(js, null) }
+            insets
+        }
+        // ───────────────────────────────────────────────────────────────────
 
         pipManager = PiPManager(this, webView)
         pipManager.registerBridge()
@@ -100,38 +128,28 @@ class MainActivity : Activity() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val uri = request?.url ?: return false
 
-                // ========== HANDLE ANY INTENT:// SCHEME (for any media player) ==========
                 if (uri.scheme == "intent") {
                     return try {
                         val intent = Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME)
-                        // Try to start the intent – Android will resolve to the appropriate player
                         startActivity(intent)
-                        true // handled
+                        true
                     } catch (e: URISyntaxException) {
                         e.printStackTrace()
-                        true // prevent WebView from loading invalid URI
+                        true
                     } catch (e: ActivityNotFoundException) {
-                        // The app that can handle this intent is not installed
                         val packageName = intent.`package`
                         if (packageName != null) {
-                            // Redirect to the Play Store page for that specific app
                             val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName"))
                             startActivity(marketIntent)
                         } else {
-                            // No package specified – show a user-friendly message
                             Toast.makeText(this@MainActivity, "No app found to handle this link", Toast.LENGTH_SHORT).show()
                         }
                         true
                     }
                 }
 
-                // ========== EXISTING HANDLING FOR OTHER URLS ==========
                 val host = uri.host ?: return false
-
-                // Keep local Seanime traffic inside the main WebView
                 if (host == LOCAL_HOST) return false
-
-                // Everything else → custom popup bottom sheet
                 PopupWebViewSheet.show(this@MainActivity, uri.toString())
                 return true
             }
@@ -198,6 +216,21 @@ class MainActivity : Activity() {
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         pipManager.onPiPModeChanged(isInPictureInPictureMode)
+        
+        // Reset WebView zoom when exiting PiP
+        if (!isInPictureInPictureMode) {
+            webView.postDelayed({
+                webView.setInitialScale(100)
+                webView.postDelayed({
+                    webView.evaluateJavascript("""
+                        (function() {
+                            document.documentElement.style.zoom = '1';
+                            document.body.style.zoom = '1';
+                        })();
+                    """.trimIndent(), null)
+                }, 50)
+            }, 100)
+        }
     }
 
     private fun toggleSystemBars(hide: Boolean) {
