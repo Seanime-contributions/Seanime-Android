@@ -337,12 +337,14 @@ object UIBottomNav {
                     return !!document.querySelector('[data-manga-reader-bar="true"]');
                 }
 
-                // ── Drawer detection (Vaul + UI-Drawer) ─────────────────────────
+                // ── Drawer / Modal detection ─────────────────────────────────────
                 function isDrawerOpen() {
                     // Check for Vaul drawers
                     if (document.querySelector('[data-vaul-drawer][data-state="open"]')) return true;
                     // Check for UI-Drawer dialogs (playlists, etc)
                     if (document.querySelector('.UI-Drawer__content[data-state="open"]')) return true;
+                    // Check for UI-Modal overlay
+                    if (document.querySelector('.UI-Modal__overlay[data-state="open"]')) return true;
                     return false;
                 }
 
@@ -369,36 +371,39 @@ object UIBottomNav {
                     hideSidebarTriggers();
                 }
 
-                // ── Observe drawer state changes ─────────────────────────────────
-                // Watch for both Vaul drawer and UI-Drawer elements
+                // ── Observe drawer / modal state changes ─────────────────────────
+                // Watch for Vaul drawer, UI-Drawer, and UI-Modal overlay elements
                 var drawerAttrObserver = new MutationObserver(function(mutations) {
                     mutations.forEach(function(mutation) {
                         if (mutation.attributeName === 'data-state' &&
                             (mutation.target.hasAttribute('data-vaul-drawer') ||
-                             mutation.target.classList.contains('UI-Drawer__content'))) {
+                             mutation.target.classList.contains('UI-Drawer__content') ||
+                             mutation.target.classList.contains('UI-Modal__overlay'))) {
                             updateNavVisibility();
                         }
                     });
                 });
 
                 function observeExistingDrawers() {
-                    document.querySelectorAll('[data-vaul-drawer], .UI-Drawer__content').forEach(function(drawer) {
-                        drawerAttrObserver.observe(drawer, { attributes: true, attributeFilter: ['data-state'] });
+                    document.querySelectorAll('[data-vaul-drawer], .UI-Drawer__content, .UI-Modal__overlay').forEach(function(el) {
+                        drawerAttrObserver.observe(el, { attributes: true, attributeFilter: ['data-state'] });
                     });
                 }
 
-                // Watch for drawers being dynamically added to the DOM.
+                // Watch for drawers/modals being dynamically added to the DOM.
                 new MutationObserver(function(mutations) {
                     var needsCheck = false;
                     mutations.forEach(function(mutation) {
                         mutation.addedNodes.forEach(function(node) {
                             if (node.nodeType !== 1) return;
-                            if (node.hasAttribute('data-vaul-drawer') || node.classList.contains('UI-Drawer__content')) {
+                            if (node.hasAttribute('data-vaul-drawer') ||
+                                node.classList.contains('UI-Drawer__content') ||
+                                node.classList.contains('UI-Modal__overlay')) {
                                 drawerAttrObserver.observe(node, { attributes: true, attributeFilter: ['data-state'] });
                                 needsCheck = true;
                             }
-                            // Also catch drawers nested inside added subtrees.
-                            node.querySelectorAll && node.querySelectorAll('[data-vaul-drawer], .UI-Drawer__content').forEach(function(child) {
+                            // Also catch elements nested inside added subtrees.
+                            node.querySelectorAll && node.querySelectorAll('[data-vaul-drawer], .UI-Drawer__content, .UI-Modal__overlay').forEach(function(child) {
                                 drawerAttrObserver.observe(child, { attributes: true, attributeFilter: ['data-state'] });
                                 needsCheck = true;
                             });
@@ -407,7 +412,7 @@ object UIBottomNav {
                     if (needsCheck) updateNavVisibility();
                 }).observe(document.body, { childList: true, subtree: true });
 
-                // Catch any drawers already in the DOM at init time.
+                // Catch any drawers/modals already in the DOM at init time.
                 observeExistingDrawers();
 
                 function waitForReady() {
