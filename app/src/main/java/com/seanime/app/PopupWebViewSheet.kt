@@ -3,6 +3,8 @@ package com.seanime.app
 import android.app.Activity
 import android.app.Dialog
 import android.graphics.Color
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -115,10 +117,10 @@ object PopupWebViewSheet {
         progressLp.topMargin = dividerTopMargin + 1
         progress.layoutParams = progressLp
         progress.max = 100
-        progress.progressDrawable?.setColorFilter(
-            Color.parseColor("#818cf8"),
-            android.graphics.PorterDuff.Mode.SRC_IN
-        )
+
+        // Fix deprecation warning: use PorterDuffColorFilter with colorFilter setter
+        val progressColor = Color.parseColor("#818cf8")
+        progress.progressDrawable?.colorFilter = PorterDuffColorFilter(progressColor, PorterDuff.Mode.SRC_IN)
 
         // ── Popup WebView ───────────────────────────────────────────────────
         val contentTopMargin = dividerTopMargin + 1 + progressH
