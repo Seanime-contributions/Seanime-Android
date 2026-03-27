@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -35,8 +36,7 @@ class SeanimeService : Service() {
         notificationManager = getSystemService(NotificationManager::class.java)
         createNotificationChannel()
 
-        // Call startForeground immediately to satisfy Android's foreground service requirement,
-        // even before permission is granted — this prevents the ForegroundServiceDidNotStartInTimeException
+        // Call startForeground immediately to satisfy Android's foreground service requirement
         promoteToForeground(lastStatus)
 
         registerPermissionReceiver()
@@ -56,7 +56,9 @@ class SeanimeService : Service() {
         }
         val filter = IntentFilter(ACTION_NOTIFICATION_PERMISSION_GRANTED)
         if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(permissionReceiver, filter, 0x4) // RECEIVER_NOT_EXPORTED
+            // Using 0x4 directly to avoid unresolved reference errors in some SDK environments
+            // 0x4 corresponds to Context.RECEIVER_NOT_EXPORTED
+            registerReceiver(permissionReceiver, filter, 0x4)
         } else {
             registerReceiver(permissionReceiver, filter)
         }
@@ -80,19 +82,18 @@ class SeanimeService : Service() {
             this, 0, stopIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+
+        // Fix: Use Icon.createWithResource to avoid the deprecated Action.Builder constructor
+        val actionIcon = Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel)
+        val stopAction = Notification.Action.Builder(actionIcon, "Exit", pendingStopIntent).build()
+
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("Seanime")
             .setContentText(status)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOnlyAlertOnce(true)
             .setOngoing(true)
-            .addAction(
-                Notification.Action.Builder(
-                    android.R.drawable.ic_menu_close_clear_cancel,
-                    "Exit",
-                    pendingStopIntent
-                ).build()
-            )
+            .addAction(stopAction)
             .build()
     }
 
