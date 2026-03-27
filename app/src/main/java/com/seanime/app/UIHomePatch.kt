@@ -6,7 +6,7 @@ object UIHomePatch {
 
     fun inject(webView: WebView) {
         injectHomeStyles(webView)
-        // Removed carousel and toggle injections
+        injectModalStyles(webView)
     }
 
     private fun injectHomeStyles(webView: WebView) {
@@ -17,161 +17,190 @@ object UIHomePatch {
             var s = document.createElement('style');
             s.id = '__seanime_home_styles';
             s.textContent = `
-                /* ── Banner: shrink on mobile so it doesn't eat half the screen ── */
+                /* ── Global layout constraints & Top Spacing ── */
+                html, body {
+                    overflow-x: hidden !important;
+                    position: relative !important;
+                    width: 100% !important;
+                    max-width: 100vw !important;
+                }
+
+                [data-page-wrapper="true"] {
+                    padding-top: 1.5rem !important;
+                    overflow-x: hidden !important;
+                    max-width: 100vw !important;
+                    display: block !important;
+                }
+
+                /* ── Banner: shrink on mobile ── */
                 [data-library-header-container="true"] {
                     height: 14rem !important;
                 }
-                /* Reduce banner bottom gradient/shadow height */
                 [data-library-header-banner-bottom-gradient="true"] {
                     height: 8rem !important;
                 }
                 [data-layout-header-background-gradient="true"] {
                     height: 4rem !important;
                 }
-                /* Compensate top padding containers that assume full banner height */
                 [data-library-toolbar-top-padding="true"].h-28 {
                     height: 4rem !important;
                 }
 
-                /* ── Top navbar: hide desktop nav links, keep the action icons ── */
-                [data-top-menu="true"] {
-                    display: none !important;
-                }
-                /* Remove the spacer so action icons sit flush right */
-                [data-top-navbar-content-separator="true"] {
+                /* ── Top navbar ── */
+                [data-top-menu="true"], [data-top-navbar-content-separator="true"] {
                     display: none !important;
                 }
 
-                /* ── Currently watching section: allow horizontal overflow ── */
-                [data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"] {
-                    overflow: visible !important;
-                }
-                /* The page wrapper must not clip the carousel */
-                [data-page-wrapper="true"] {
-                    overflow: visible !important;
-                }
-
-                /* ── Continue watching carousel: compact card height ── */
-                [data-episode-card="true"] [data-episode-card-image-container="true"] {
-                    aspect-ratio: 16/7 !important;
-                }
-
-                /* ── Episode card subtitle: single line, smaller ── */
-                [data-episode-card-subtitle="true"] {
-                    font-size: 0.78rem !important;
-                }
-                [data-episode-card-subtitle="true"] span.flex-none {
-                    font-size: 0.85rem !important;
-                }
-                [data-episode-card-title="true"] {
-                    font-size: 0.92rem !important;
+                /* ── Carousel / Grid fix for Horizontal Scrolling ── */
+                [data-library-collection-list-item-media-card-lazy-grid] {
+                    min-width: 0 !important;
+                    max-width: 100vw !important;
                     width: 100% !important;
+                    overflow: hidden !important;
                 }
 
-                /* ── Library grid: 2-col tighter gap on mobile ── */
-                [data-media-card-grid="true"] {
-                    gap: 0.65rem !important;
-                }
-
-                /* ── Media card: slightly reduce cover aspect so more fit ── */
-                .media-entry-card__body {
-                    aspect-ratio: 6/8 !important;
-                }
-
-                /* ── Card title: tighter ── */
-                [data-media-entry-card-title-section="true"] {
-                    padding-top: 0.3rem !important;
-                }
-                [data-media-entry-card-title-section-title="true"] {
-                    font-size: 0.78rem !important;
-                    line-height: 1.2 !important;
-                }
-                [data-media-entry-card-title-section-year-season="true"] {
-                    font-size: 0.7rem !important;
-                }
-
-                /* ── Genre tabs: smaller pills on mobile ── */
-                .UI-StaticTabs__trigger {
-                    height: 2.2rem !important;
-                    padding-left: 0.85rem !important;
-                    padding-right: 0.85rem !important;
-                    font-size: 0.82rem !important;
-                }
-
-                /* ── Section headings: tighter margin ── */
-                [data-continue-watching-container="true"] h2,
-                [data-library-collection-list-item-header="true"] h2 {
-                    font-size: 1.1rem !important;
-                }
-
-                /* ── Grid/Carousel transition animations ── */
-                [data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"] [data-media-card-grid="true"] {
-                    transition: opacity 0.3s ease !important;
-                }
-
-                /* Hide grid when not ready – enables fade out */
-                [data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"]:not([data-grid-ready]) [data-media-card-grid="true"] {
-                    opacity: 0 !important;
-                }
-
-                [data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"][data-view-mode="grid"][data-grid-ready="true"] [data-media-card-grid="true"] {
-                    opacity: 1 !important;
-                }
-
-                [data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"][data-view-mode="carousel"][data-grid-ready="true"] [data-media-card-grid="true"] {
-                    opacity: 1 !important;
-                }
-
-                /* ── Grid view styles - force 2 columns ── */
                 [data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"][data-view-mode="grid"] [data-media-card-grid="true"] {
-                    display: grid !important;
-                    grid-template-columns: repeat(2, 1fr) !important;
+                    display: flex !important;
+                    flex-direction: row !important;
+                    flex-wrap: nowrap !important;
+                    overflow-x: auto !important;
+                    overflow-y: hidden !important;
+                    -webkit-overflow-scrolling: touch !important;
+                    scroll-snap-type: x mandatory !important;
                     gap: 0.65rem !important;
-                    padding: 0.25rem 1rem 1rem 1rem !important;
-                    overflow: visible !important;
-                    flex-direction: unset !important;
-                    flex-wrap: unset !important;
-                    scroll-snap-type: unset !important;
-                    -webkit-overflow-scrolling: unset !important;
+                    padding: 0.5rem 1rem 1.5rem 1rem !important;
+                    width: auto !important;
+                    max-width: 100% !important;
+                    scrollbar-width: none !important;
+                }
+                
+                [data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"][data-view-mode="grid"] [data-media-card-grid="true"]::-webkit-scrollbar {
+                    display: none !important;
                 }
 
                 [data-library-collection-list-item-media-card-lazy-grid][data-list-type="CURRENT"][data-view-mode="grid"] [data-media-entry-card-container="true"] {
-                    flex: unset !important;
-                    flex-basis: unset !important;
+                    flex: 0 0 auto !important;
+                    width: 135px !important;
+                    scroll-snap-align: start !important;
+                }
+
+                /* ── Card UI tweaks ── */
+                [data-episode-card-subtitle="true"] { font-size: 0.78rem !important; }
+                [data-episode-card-title="true"] { font-size: 0.92rem !important; width: 100% !important; }
+                [data-media-card-grid="true"] { gap: 0.65rem !important; }
+                [data-media-entry-card-title-section-title="true"] { font-size: 0.78rem !important; }
+
+                /* ── Genre tabs ── */
+                .UI-StaticTabs__trigger {
+                    height: 2.2rem !important;
+                    padding: 0 0.85rem !important;
+                    font-size: 0.82rem !important;
+                }
+            `;
+            document.head.appendChild(s);
+        })();
+        """.trimIndent()
+        webView.evaluateJavascript(js, null)
+    }
+
+    private fun injectModalStyles(webView: WebView) {
+        val js = """
+        (function() {
+            if (document.getElementById('__seanime_modal_styles')) return;
+
+            var s = document.createElement('style');
+            s.id = '__seanime_modal_styles';
+            s.textContent = `
+                /* ── Modal Shell & Top Spacing ── */
+                .UI-Modal__content {
+                    padding: 3.5rem 0.75rem 1rem 0.75rem !important; /* Heavily increased top space */
+                    max-height: 100svh !important;
+                    overflow-y: auto !important;
+                    overflow-x: hidden !important; 
+                    -webkit-overflow-scrolling: touch !important;
                     width: 100% !important;
-                    max-width: unset !important;
-                    scroll-snap-align: unset !important;
+                    max-width: 100vw !important;
+                    box-sizing: border-box !important;
                 }
 
-                /* ── View toggle button - only show background in grid mode ── */
-                #__seanime_cw_view_toggle {
-                    background-color: transparent !important;
-                    transition: background-color 0.3s ease !important;
+                .UI-Modal__content > div {
+                    max-width: 100% !important;
+                    min-width: 0 !important;
                 }
 
-                #__seanime_cw_view_toggle:hover {
-                    background-color: rgba(255, 255, 255, 0.15) !important;
+                /* ── Banner Adjustment ── */
+                .UI-Modal__content .absolute.opacity-30 {
+                    height: 7rem !important;
+                    top: 1rem !important; 
                 }
 
-                #__seanime_cw_view_toggle:active {
-                    background-color: rgba(255, 255, 255, 0.25) !important;
+                /* ── Header Row & Title Truncation ── */
+                .UI-Modal__content [data-media-page-header-entry-details="true"] {
+                    flex-direction: row !important;
+                    align-items: flex-start !important;
+                    gap: 0.75rem !important;
+                    width: 100% !important;
+                    overflow: hidden !important; /* Required for ellipsis child */
                 }
 
-                #__seanime_cw_view_toggle[data-view-mode="grid"] {
-                    background-color: rgba(255, 255, 255, 0.2) !important;
+                .UI-Modal__content [data-media-page-header-entry-details-cover-image-container="true"] {
+                    width: 110px !important;
+                    min-width: 110px !important;
+                    flex-shrink: 0 !important;
                 }
 
-                #__seanime_cw_view_toggle[data-view-mode="grid"]:hover {
-                    background-color: rgba(255, 255, 255, 0.3) !important;
+                /* Fixed Title Truncation */
+                .UI-Modal__content [data-media-page-header-entry-details-title-container="true"] {
+                    flex: 1 1 auto !important;
+                    min-width: 0 !important; /* CRITICAL for flex ellipsis */
+                    overflow: hidden !important;
                 }
 
-                #__seanime_cw_view_toggle[data-view-mode="grid"]:active {
-                    background-color: rgba(255, 255, 255, 0.35) !important;
+                .UI-Modal__content [data-media-page-header-entry-details-title-container="true"] div.font-bold {
+                    font-size: 1.15rem !important;
+                    white-space: nowrap !important;
+                    overflow: hidden !important;
+                    text-overflow: ellipsis !important;
+                    display: block !important;
+                    width: 100% !important;
                 }
 
-                #__seanime_cw_view_toggle svg {
-                    width: 20px;
-                    height: 20px;
+                /* ── Modal-Only Carousel Fix (Relations/Recommendations) ── */
+                .UI-Modal__content [data-media-card-grid="true"] {
+                    display: flex !important;
+                    flex-wrap: nowrap !important;
+                    flex-direction: row !important;
+                    overflow-x: auto !important;
+                    overflow-y: hidden !important;
+                    -webkit-overflow-scrolling: touch !important;
+                    scroll-snap-type: x mandatory !important;
+                    gap: 0.75rem !important;
+                    padding: 0.5rem 0 1.5rem 0 !important;
+                    width: 100% !important;
+                    scrollbar-width: none !important;
+                }
+                
+                .UI-Modal__content [data-media-card-grid="true"]::-webkit-scrollbar {
+                    display: none !important;
+                }
+
+                /* Fix squarish look and miniaturization IN MODAL ONLY */
+                .UI-Modal__content [data-media-card-grid="true"] > * {
+                    flex: 0 0 auto !important;
+                    width: 125px !important; /* Slightly bigger */
+                    max-width: 125px !important;
+                    scroll-snap-align: start !important;
+                }
+
+                .UI-Modal__content .media-entry-card__body {
+                    aspect-ratio: 2/3 !important; /* Proper vertical poster ratio */
+                }
+
+                /* Action buttons list */
+                .UI-Modal__content [data-media-page-header-entry-details="true"] ~ div.mt-6 {
+                    display: flex !important;
+                    flex-wrap: wrap !important;
+                    gap: 0.5rem !important;
                 }
             `;
             document.head.appendChild(s);

@@ -44,7 +44,7 @@
 ## Important Notes
 
 > [!IMPORTANT]
-> **Independent Project:** This port is maintained by Me **(Pal-droid)**. The original creator of Seanime (**5rahim**) is **not** responsible for this Android version. Please [open all issues here](https://github.com/Pal-droid/Seanime-android/issues) rather than on the main repo.
+> **Independent Project:** This port is maintained by Me **(Pal-droid)**. The original creator of Seanime (**5rahim**) is **not** responsible for this Android version. Please [open all related issues here](https://github.com/Pal-droid/Seanime-android/issues) rather than on the main repo.
 
 * **Early Alpha:** This project is in early development. Expect bugs and untested features.
 * **Battery Optimization:** Since the Go backend runs as a foreground service, you may need to exclude the app from battery optimization for the best experience.
