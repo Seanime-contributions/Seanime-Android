@@ -1,5 +1,6 @@
 package com.seanime.app
 
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.os.Build
 import android.webkit.WebSettings
@@ -9,7 +10,6 @@ object Performance {
 
     fun init(context: Context, webView: WebView) {
         applyWebViewSettings(context, webView)
-        injectRuntimeOptimizations(webView)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -20,8 +20,8 @@ object Performance {
         val settings: WebSettings = webView.settings
 
         // ── Rendering ────────────────────────────────────────────────────────
-        // Hardware acceleration is set on the View layer (see below); enabling
-        // it in settings as well ensures the compositor path is fully active.
+        // Hardware acceleration is set on the View layer; enabling it here ensures
+        // the compositor path is fully active.
         webView.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
 
         // Use the widest viewport so the page layout matches a desktop/tablet
@@ -35,25 +35,15 @@ object Performance {
         settings.javaScriptCanOpenWindowsAutomatically = false // no pop-ups
 
         // ── Caching ──────────────────────────────────────────────────────────
-        // LOAD_DEFAULT honours HTTP cache-control headers; fall back to cache
-        // when offline.  This avoids unnecessary network round-trips for
-        // static assets (JS bundles, images, fonts).
+        // LOAD_DEFAULT honours HTTP cache-control headers; falls back to cache
+        // when offline. This avoids unnecessary network round-trips for static assets.
         settings.cacheMode = WebSettings.LOAD_DEFAULT
 
-        // Point the app cache at the app's private cache directory so the OS
-        // can reclaim it under memory pressure without user data loss.
-        settings.setAppCachePath(context.cacheDir.absolutePath)
-        @Suppress("DEPRECATION")
-        settings.setAppCacheEnabled(true)
-
         // ── Network ──────────────────────────────────────────────────────────
-        // Allow the page to store data (IndexedDB, localStorage, etc.) which
-        // the Next.js / React app uses for client-side caching.
+        // Allow the page to store data (IndexedDB, localStorage, etc.)
         settings.domStorageEnabled = true
-        settings.databaseEnabled  = true
+        settings.databaseEnabled   = true
 
-        // Fetch sub-resources (images, fonts, XHR) over HTTP when the page
-        // itself is HTTPS — needed if the local dev server is plain HTTP.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
         }
@@ -62,17 +52,15 @@ object Performance {
         settings.mediaPlaybackRequiresUserGesture = false  // inline video/audio
         settings.loadsImagesAutomatically = true
 
-        // Disable unnecessary features that add overhead
+        // Disable features that add overhead or expand attack surface
         settings.setSupportZoom(false)
         settings.builtInZoomControls = false
         settings.displayZoomControls = false
         settings.setSupportMultipleWindows(false)
-        settings.allowFileAccess = false          // not needed; reduces attack surface
+        settings.allowFileAccess    = false
         settings.allowContentAccess = false
 
         // ── User-agent tweak ─────────────────────────────────────────────────
-        // Append a short token so the server can serve optimised responses
-        // (e.g. skip SSR hydration hints not needed in the WebView shell).
         val ua = settings.userAgentString
         if (!ua.contains("SeanimeAndroid")) {
             val versionName = try {
@@ -87,9 +75,7 @@ object Performance {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 2. JavaScript runtime optimisations — injected after every page load
-    //    Call injectRuntimeOptimizations(webView) from WebViewClient.onPageFinished
-    //    as well as here for the initial load.
+    // 2. JavaScript runtime optimisations — call from WebViewClient.onPageFinished
     // ─────────────────────────────────────────────────────────────────────────
 
     fun injectRuntimeOptimizations(webView: WebView) {
@@ -100,16 +86,13 @@ object Performance {
         injectNetworkHints(webView)
     }
 
-    // ── 2a. Scroll optimisations ─────────────────────────────────────────────
-    // passive listeners + will-change hints keep scroll jank-free on older
-    // Chromium builds embedded in WebView.
     private fun injectScrollOptimizations(webView: WebView) {
         val js = """
         (function() {
-            if (window.__seanime_scroll_opt) return;
-            window.__seanime_scroll_opt = true;
+            if (window.__seanime_scroll_observer) {
+                window.__seanime_scroll_observer.disconnect();
+            }
 
-            // Force GPU-composited scrolling on the main scroll containers.
             var CSS_SCROLL = [
                 '[data-main-layout-content="true"]',
                 '.overflow-y-auto',
@@ -118,67 +101,58 @@ object Performance {
             ];
             CSS_SCROLL.forEach(function(sel) {
                 document.querySelectorAll(sel).forEach(function(el) {
-                    el.style.webkitOverflowScrolling = 'touch';
                     el.style.willChange = 'scroll-position';
                 });
             });
 
-            // Promote heavy animated elements to their own compositor layer.
             var CSS_PROMOTE = [
                 '[data-media-entry-card-body="true"]',
                 '#__seanime_bottom_nav',
                 '[data-media-page-header-entry-details-cover-image-container="true"]'
             ];
-            CSS_PROMOTE.forEach(function(sel) {
-                document.querySelectorAll(sel).forEach(function(el) {
-                    el.style.willChange = 'transform';
-                    el.style.transform  = 'translateZ(0)';
-                });
-            });
 
-            // Re-apply to nodes added after initial render (lazy-loaded cards, etc.)
+            function promoteElements(root) {
+                CSS_PROMOTE.forEach(function(sel) {
+                    (root.querySelectorAll ? root.querySelectorAll(sel) : []).forEach(function(el) {
+                        el.style.willChange = 'transform';
+                        el.style.transform  = 'translateZ(0)';
+                    });
+                    if (root.matches && root.matches(sel)) {
+                        root.style.willChange = 'transform';
+                        root.style.transform  = 'translateZ(0)';
+                    }
+                });
+            }
+
+            promoteElements(document);
+
             var promoObserver = new MutationObserver(function(mutations) {
                 mutations.forEach(function(m) {
                     m.addedNodes.forEach(function(node) {
                         if (node.nodeType !== 1) return;
-                        CSS_PROMOTE.forEach(function(sel) {
-                            if (node.matches && node.matches(sel)) {
-                                node.style.willChange = 'transform';
-                                node.style.transform  = 'translateZ(0)';
-                            }
-                            node.querySelectorAll && node.querySelectorAll(sel).forEach(function(el) {
-                                el.style.willChange = 'transform';
-                                el.style.transform  = 'translateZ(0)';
-                            });
-                        });
+                        promoteElements(node);
                     });
                 });
             });
             promoObserver.observe(document.body, { childList: true, subtree: true });
+            window.__seanime_scroll_observer = promoObserver;
         })();
         """.trimIndent()
         webView.evaluateJavascript(js, null)
     }
 
-    // ── 2b. Image lazy-loading ───────────────────────────────────────────────
-    // Retrofit native lazy-loading onto any image that doesn't already have it,
-    // and decode images asynchronously so the main thread stays unblocked.
     private fun injectImageLazyLoading(webView: WebView) {
         val js = """
         (function() {
-            if (window.__seanime_img_opt) return;
-            window.__seanime_img_opt = true;
+            if (window.__seanime_img_observer) {
+                window.__seanime_img_observer.disconnect();
+            }
 
             function optimiseImages(root) {
                 (root || document).querySelectorAll('img').forEach(function(img) {
-                    // Skip cover / banner images that are above-the-fold / eager.
                     if (img.loading === 'eager') return;
-                    if (!img.hasAttribute('loading')) img.setAttribute('loading', 'lazy');
+                    if (!img.hasAttribute('loading'))  img.setAttribute('loading',  'lazy');
                     if (!img.hasAttribute('decoding')) img.setAttribute('decoding', 'async');
-                    // Prevent layout shift — only set if no explicit size is given.
-                    if (!img.width && !img.style.width) {
-                        img.style.contentVisibility = 'auto';
-                    }
                 });
             }
 
@@ -194,70 +168,63 @@ object Performance {
                 });
             });
             imgObserver.observe(document.body, { childList: true, subtree: true });
+            window.__seanime_img_observer = imgObserver;
         })();
         """.trimIndent()
         webView.evaluateJavascript(js, null)
     }
 
-    // ── 2c. Memory pressure handler ─────────────────────────────────────────
-    // When the Android system fires a low-memory event we forward it to the
-    // page so React / the app can flush caches.
     private fun injectMemoryPressureHandler(webView: WebView) {
         val js = """
         (function() {
-            if (window.__seanime_mem_opt) return;
-            window.__seanime_mem_opt = true;
+            if (window.__seanime_scroll_mem_handler) {
+                window.removeEventListener('scroll', window.__seanime_scroll_mem_handler);
+            }
 
-            // Throttle expensive re-renders while a scroll is in flight.
             var scrollTimer = null;
-            window.addEventListener('scroll', function() {
+            var scrollHandler = function() {
                 document.body.dataset.scrolling = 'true';
                 clearTimeout(scrollTimer);
                 scrollTimer = setTimeout(function() {
                     delete document.body.dataset.scrolling;
                 }, 150);
-            }, { passive: true });
+            };
+            window.__seanime_scroll_mem_handler = scrollHandler;
+            window.addEventListener('scroll', scrollHandler, { passive: true });
 
-            // Expose a hook the native layer can call to signal memory pressure:
-            //   webView.evaluateJavascript("window.__seanime_onMemoryPressure()", null)
             window.__seanime_onMemoryPressure = function() {
                 // 1. Release any object-URL blobs still held in memory.
                 document.querySelectorAll('img[src^="blob:"]').forEach(function(img) {
                     try { URL.revokeObjectURL(img.src); } catch(e) {}
                 });
-                // 2. Ask React Query / SWR to clear their in-memory caches if available.
-                try {
-                    if (window.__REACT_QUERY_DEVTOOLS_GLOBAL_HOOK__) {
-                        window.__REACT_QUERY_DEVTOOLS_GLOBAL_HOOK__.queryClient.clear();
-                    }
-                } catch(e) {}
-                // 3. Fire a custom DOM event so the app's own listeners can react.
+                
+                // 2. Fire a custom DOM event so the app's own listeners can react.
+                // The application should listen for 'seanime:memorypressure' to clear its own caches.
                 window.dispatchEvent(new Event('seanime:memorypressure'));
-                console.log('[Seanime] Memory pressure signal received — caches flushed.');
+                console.log('[Seanime] Memory pressure signal received — event dispatched.');
             };
         })();
         """.trimIndent()
         webView.evaluateJavascript(js, null)
     }
 
-    // ── 2d. Animation throttling ─────────────────────────────────────────────
-    // Cap CSS animations / transitions on low-end devices and pause them
-    // entirely when the app is backgrounded.
     private fun injectAnimationThrottling(webView: WebView) {
         val js = """
         (function() {
-            if (window.__seanime_anim_opt) return;
-            window.__seanime_anim_opt = true;
+            var PAUSE_STYLE_ID    = '__seanime_anim_throttle';
+            var REDUCED_STYLE_ID  = '__seanime_reduced_motion';
+            var SCROLL_STYLE_ID   = '__seanime_scroll_throttle';
 
-            var styleId = '__seanime_anim_throttle';
+            if (window.__seanime_vis_handler) {
+                document.removeEventListener('visibilitychange', window.__seanime_vis_handler);
+            }
 
             function setAnimationState(paused) {
-                var existing = document.getElementById(styleId);
+                var existing = document.getElementById(PAUSE_STYLE_ID);
                 if (paused) {
                     if (existing) return;
                     var s = document.createElement('style');
-                    s.id = styleId;
-                    // Pause all CSS animations and transitions while hidden.
+                    s.id = PAUSE_STYLE_ID;
                     s.textContent = '*, *::before, *::after { animation-play-state: paused !important; transition: none !important; }';
                     document.head.appendChild(s);
                 } else {
@@ -265,17 +232,19 @@ object Performance {
                 }
             }
 
-            // Pause animations when the tab/app goes into the background.
-            document.addEventListener('visibilitychange', function() {
-                setAnimationState(document.hidden);
-            });
+            var visHandler = function() { setAnimationState(document.hidden); };
+            window.__seanime_vis_handler = visHandler;
+            document.addEventListener('visibilitychange', visHandler);
+            setAnimationState(document.hidden);
 
-            // Reduce motion if the OS "reduce motion" preference is set.
+            var existingReduced = document.getElementById(REDUCED_STYLE_ID);
+            if (existingReduced) existingReduced.remove();
+
             var mq = window.matchMedia('(prefers-reduced-motion: reduce)');
             if (mq.matches) {
-                var s = document.createElement('style');
-                s.id = '__seanime_reduced_motion';
-                s.textContent = [
+                var sr = document.createElement('style');
+                sr.id = REDUCED_STYLE_ID;
+                sr.textContent = [
                     '*, *::before, *::after {',
                     '  animation-duration: 0.01ms !important;',
                     '  animation-iteration-count: 1 !important;',
@@ -283,40 +252,38 @@ object Performance {
                     '  scroll-behavior: auto !important;',
                     '}'
                 ].join('\n');
-                document.head.appendChild(s);
+                document.head.appendChild(sr);
             }
 
-            // Throttle hover-triggered scale transitions on media cards while
-            // scrolling — avoids triggering hundreds of compositor updates.
+            if (window.__seanime_scroll_anim_handler) {
+                window.removeEventListener('scroll', window.__seanime_scroll_anim_handler);
+            }
+
             var scrollThrottle = null;
-            window.addEventListener('scroll', function() {
-                if (!scrollThrottle) {
+            var scrollAnimHandler = function() {
+                if (!document.getElementById(SCROLL_STYLE_ID)) {
                     var s2 = document.createElement('style');
-                    s2.id = '__seanime_scroll_throttle';
-                    s2.textContent = '.media-entry-card__body img { transition: none !important; }';
+                    s2.id = SCROLL_STYLE_ID;
+                    s2.textContent = '[data-media-entry-card-body="true"] img { transition: none !important; }';
                     document.head.appendChild(s2);
                 }
                 clearTimeout(scrollThrottle);
                 scrollThrottle = setTimeout(function() {
-                    var el = document.getElementById('__seanime_scroll_throttle');
+                    var el = document.getElementById(SCROLL_STYLE_ID);
                     if (el) el.remove();
                     scrollThrottle = null;
                 }, 200);
-            }, { passive: true });
+            };
+            window.__seanime_scroll_anim_handler = scrollAnimHandler;
+            window.addEventListener('scroll', scrollAnimHandler, { passive: true });
         })();
         """.trimIndent()
         webView.evaluateJavascript(js, null)
     }
 
-    // ── 2e. Network / resource hints ────────────────────────────────────────
-    // Inject <link rel="preconnect"> for known third-party origins so the
-    // TLS handshake is done before the browser actually needs the resource.
     private fun injectNetworkHints(webView: WebView) {
         val js = """
         (function() {
-            if (window.__seanime_net_opt) return;
-            window.__seanime_net_opt = true;
-
             var PRECONNECT = [
                 'https://s4.anilist.co',
                 'https://img.anili.st',
@@ -346,8 +313,6 @@ object Performance {
                 document.head.appendChild(link);
             });
 
-            // Fetch-priority: mark banner/cover images as high-priority so the
-            // browser's preload scanner picks them up before lazy images.
             document.querySelectorAll(
                 '[data-media-page-header-entry-details-cover-image="true"], img[alt="banner image"]'
             ).forEach(function(img) {
@@ -359,40 +324,21 @@ object Performance {
         webView.evaluateJavascript(js, null)
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // 3. Native memory-pressure forwarding
-    //    Call this from Activity.onTrimMemory / onLowMemory.
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Forward Android memory-pressure events into the page so the JS layer
-     * can release caches.  Wire up in MainActivity:
-     *
-     *   override fun onTrimMemory(level: Int) {
-     *       super.onTrimMemory(level)
-     *       Performance.onTrimMemory(webView, level)
-     *   }
-     *   override fun onLowMemory() {
-     *       super.onLowMemory()
-     *       Performance.onLowMemory(webView)
-     *   }
-     */
     fun onTrimMemory(webView: WebView, level: Int) {
-        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE) {
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_MODERATE) {
             webView.evaluateJavascript(
-                "if(window.__seanime_onMemoryPressure) window.__seanime_onMemoryPressure();",
+                "if(typeof window.__seanime_onMemoryPressure === 'function') window.__seanime_onMemoryPressure();",
                 null
             )
-            if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
-                // On severe pressure also ask WebView to free its internal caches.
-                webView.clearCache(false)   // false = keep disk cache
+            if (level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
+                webView.clearCache(false)
             }
         }
     }
 
     fun onLowMemory(webView: WebView) {
         webView.evaluateJavascript(
-            "if(window.__seanime_onMemoryPressure) window.__seanime_onMemoryPressure();",
+            "if(typeof window.__seanime_onMemoryPressure === 'function') window.__seanime_onMemoryPressure();",
             null
         )
         webView.clearCache(false)
