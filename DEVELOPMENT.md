@@ -211,6 +211,13 @@ Open the project in **Android Studio** or **CodeAssist** (on-device) and build f
 
 ---
 
+## Not Planned
+
+* AndroidTV & IOS support
+* DiscordRPC support
+
+---
+
 ## Debugging
 
 ### Logs
