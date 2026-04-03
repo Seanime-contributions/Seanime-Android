@@ -1,0 +1,132 @@
+name: Bug Report
+description: Report a bug in the Android port of Seanime
+title: "[BUG] "
+labels: ["bug", "android"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Important
+        Please ensure this bug is related to the **Android port of Seanime** and not the main Seanime repository. If you're unsure, check the main repo first.
+
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation
+      description: Before submitting, please confirm the following
+      options:
+        - label: I've verified this bug is specific to the Android port, not the main Seanime repo
+          required: true
+        - label: I've searched for existing issues to avoid duplicates
+          required: true
+        - label: This is a bug report, not a feature request or question
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of the bug
+      placeholder: "What is the issue you're experiencing?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Scroll down to '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should happen instead?
+      placeholder: "The app should..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happens?
+      placeholder: "Instead, the app..."
+    validations:
+      required: true
+
+  - type: input
+    id: android-version
+    attributes:
+      label: Android Version
+      description: What Android version are you running?
+      placeholder: "e.g., Android 14, Android 13"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device Model
+      description: What device are you using?
+      placeholder: "e.g., Pixel 8, Samsung Galaxy S24"
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App Version
+      description: What version of the Android Seanime app are you running?
+      placeholder: "e.g., 1.0.0, or 'Latest from main branch'"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: Bug Frequency
+      description: How often does this bug occur?
+      options:
+        - Every time
+        - Most of the time (~75%)
+        - Sometimes (~50%)
+        - Rarely (~25%)
+        - Once (haven't reproduced)
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs or Crash Reports
+      description: |
+        Paste any relevant error messages, stack traces, or crash logs
+        Tip: You can attach images by clicking this area to highlight it and then dragging files in
+      placeholder: |
+        ```
+        Error message or stack trace here
+        ```
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or Videos
+      description: |
+        If applicable, add screenshots or a video recording of the issue
+        Tip: You can attach images by clicking this area to highlight it and then dragging files in
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context that might help understand the issue
+      placeholder: "Network type? App permissions? Recently updated? Any workarounds discovered?"
