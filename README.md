@@ -70,4 +70,5 @@
 <h2 align="center">More info regarding the project</h2>
 <p align="center">
   <a href="https://github.com/5rahim/Seanime">Official Seanime repo</a>
+  <a href="https://seanime.app/docs">Official Seanime documentation</a>
 </p>
