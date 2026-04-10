@@ -128,6 +128,7 @@ class AnimeListFactory(private val context: Context) : RemoteViewsService.Remote
             context.stopService(Intent(context, SeanimeService::class.java))
         } catch (e: Exception) {
             Log.e("SeanimeWidget", "Sync Error: ${e.message}")
+            cache.setError(e.message ?: "Failed to load data")
             loadFromCache()
         } finally {
             cache.setLoading(false)

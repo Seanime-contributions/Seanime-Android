@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.content.ComponentName
+import android.view.View
 import android.widget.RemoteViews
 import com.seanime.app.R
 import com.seanime.app.SeanimeService
@@ -60,14 +61,22 @@ class UpcomingAnimeWidget : AppWidgetProvider() {
         val views = RemoteViews(context.packageName, R.layout.widget_layout)
         val cache = WidgetCache(context)
 
-        // Show/hide loading text based on cache state
-        if (cache.isLoading() || !cache.hasValidCache()) {
-            views.setViewVisibility(R.id.loading_text, android.view.View.VISIBLE)
+        // Check for error first
+        val error = cache.getError()
+        if (error != null) {
+            // Show error in loading text
+            views.setTextViewText(R.id.loading_text, "Error: $error")
+            views.setViewVisibility(R.id.loading_text, View.VISIBLE)
+            views.setViewVisibility(R.id.anime_list_view, View.INVISIBLE)
+        } else if (cache.isLoading() || !cache.hasValidCache()) {
+            // Show loading state
+            views.setTextViewText(R.id.loading_text, "Nothing here yet")
+            views.setViewVisibility(R.id.loading_text, View.VISIBLE)
             // Keep the ListView around so RemoteViewsService still runs and can fetch.
-            views.setViewVisibility(R.id.anime_list_view, android.view.View.INVISIBLE)
+            views.setViewVisibility(R.id.anime_list_view, View.INVISIBLE)
         } else {
-            views.setViewVisibility(R.id.loading_text, android.view.View.GONE)
-            views.setViewVisibility(R.id.anime_list_view, android.view.View.VISIBLE)
+            views.setViewVisibility(R.id.loading_text, View.GONE)
+            views.setViewVisibility(R.id.anime_list_view, View.VISIBLE)
         }
 
         // Set up refresh button click
