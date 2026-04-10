@@ -104,7 +104,7 @@ object UISettingsPatch {
                     var backdrop = document.createElement('div');
                     backdrop.id = '__seanime_backdrop';
                     backdrop.style.cssText = [
-                        'position:fixed','inset:0','z-index:998',
+                        'position:fixed','inset:0','z-index:9999',   // increased from 998
                         'background:rgba(0,0,0,0.6)','opacity:0',
                         'pointer-events:none','transition:opacity 0.25s ease'
                     ].join(';');
@@ -114,7 +114,7 @@ object UISettingsPatch {
                     drawer.id = '__seanime_drawer';
                     drawer.style.cssText = [
                         'position:fixed','top:0','left:0','height:100%',
-                        'width:75vw','max-width:300px','z-index:999',
+                        'width:75vw','max-width:300px','z-index:10000',   // increased from 999
                         'transform:translateX(-100%)',
                         'transition:transform 0.28s cubic-bezier(0.4,0,0.2,1)',
                         'background:rgba(10,10,15,0.55)',
@@ -206,40 +206,39 @@ object UISettingsPatch {
                         });
                     });
 
-                    var donateSep = document.createElement('div');
-                    donateSep.style.cssText = 'height:1px;background:rgba(255,255,255,0.06);margin:0.15rem 0;flex-shrink:0;margin-top:auto;';
-                    drawer.appendChild(donateSep);
+                    // Spacer to push donate footer to bottom
+                    var spacer = document.createElement('div');
+                    spacer.style.cssText = 'flex:1;min-height:1rem;';
+                    drawer.appendChild(spacer);
 
-                    var donateWrapper = document.createElement('div');
-                    donateWrapper.style.cssText = 'padding:1.25rem;flex-shrink:0;';
+                    // --- FIXED DONATE FOOTER (transparent, non‑button, floating text+icon) ---
+                    var donateFooter = document.createElement('div');
+                    donateFooter.style.cssText = 'padding:1.1rem 1.25rem 1.5rem;border-top:1px solid rgba(255,255,255,0.07);flex-shrink:0;';
 
-                    var donateBtn = document.createElement('button');
-                    donateBtn.id = '__seanime_drawer_donate_btn';
-                    donateBtn.dataset.seanimeOwned = 'true';
-                    donateBtn.style.cssText = [
-                        'display:flex','align-items:center','gap:0.85rem','width:100%',
-                        'padding:0.8rem 1.25rem','background:transparent','border:none',
-                        'border-left:3px solid transparent','color:rgba(255,255,255,0.45)',
-                        'font-size:0.92rem','font-weight:400','text-align:left',
-                        'cursor:pointer','flex-shrink:0','box-sizing:border-box'
+                    var donateLink = document.createElement('div');
+                    donateLink.dataset.seanimeOwned = 'true';
+                    donateLink.style.cssText = [
+                        'display:inline-flex', 'align-items:center', 'justify-content:center',
+                        'gap:0.5rem', 'width:100%', 'padding:0.5rem 1rem',
+                        'border-radius:0.5rem', 'background:transparent', 'border:none',
+                        'font-size:0.875rem', 'font-weight:600', 'color:rgba(255,255,255,0.85)',
+                        'cursor:pointer', '-webkit-tap-highlight-color:transparent',
+                        'transition:opacity 0.15s'
                     ].join(';');
-
-                    var donateIconSpan = document.createElement('span');
-                    donateIconSpan.style.cssText = 'display:flex;align-items:center;justify-content:center;flex-shrink:0;width:20px;height:20px;opacity:0.5;';
-                    donateIconSpan.innerHTML = '<svg width="20" height="20" stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4 21h9.62a3.995 3.995 0 0 0 3.037-1.397l5.102-5.952a1 1 0 0 0-.442-1.6l-1.968-.656a3.043 3.043 0 0 0-2.823.503l-3.185 2.547-.617-1.235A3.98 3.98 0 0 0 9.146 11H4c-1.103 0-2 .897-2 2v6c0 1.103.897 2 2 2zm0-8h5.146c.763 0 1.448.423 1.789 1.105l.447.895H7v2h6.014a.996.996 0 0 0 .442-.11l.003-.001.004-.002h.003l.002-.001h.004l.001-.001c.009.003.003-.001.003-.001.01 0 .002-.001.002-.001h.001l.002-.001.003-.001.002-.001.002-.001.003-.001.002-.001c.003 0 .001-.001.002-.001l.003-.002.002-.001.002-.001.003-.001.002-.001h.001l.002-.001h.001l.002-.001.002-.001c.009-.001.003-.001.003-.001l.002-.001a.915.915 0 0 0 .11-.078l4.146-3.317c.262-.208.623-.273.94-.167l.557.186-4.133 4.823a2.029 2.029 0 0 1-1.52.688H4v-6zM16 2h-.017c-.163.002-1.006.039-1.983.705-.951-.648-1.774-.7-1.968-.704L12.002 2h-.004c-.801 0-1.555.313-2.119.878C9.313 3.445 9 4.198 9 5s.313 1.555.861 2.104l3.414 3.586a1.006 1.006 0 0 0 1.45-.001l3.396-3.568C18.688 6.555 19 5.802 19 5s-.313-1.555-.878-2.121A2.978 2.978 0 0 0 16.002 2H16zm1 3c0 .267-.104.518-.311.725L14 8.55l-2.707-2.843C11.104 5.518 11 5.267 11 5s.104-.518.294-.708A.977.977 0 0 1 11.979 4c.025.001.502.032 1.067.485.081.065.163.139.247.222l.707.707.707-.707c.084-.083.166-.157.247-.222.529-.425.976-.478 1.052-.484a.987.987 0 0 1 .701.292c.189.189.293.44.293.707z"></path></svg>';
-
-                    var donateLabelSpan = document.createElement('span');
-                    donateLabelSpan.textContent = 'Donate';
-                    donateLabelSpan.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-
-                    donateBtn.appendChild(donateIconSpan);
-                    donateBtn.appendChild(donateLabelSpan);
-                    donateBtn.addEventListener('click', function() {
-                        if (window.DonateBridge) window.DonateBridge.openDonate();
+                    donateLink.innerHTML = `
+                        <svg width="16" height="16" stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M4 21h9.62a3.995 3.995 0 0 0 3.037-1.397l5.102-5.952a1 1 0 0 0-.442-1.6l-1.968-.656a3.043 3.043 0 0 0-2.823.503l-3.185 2.547-.617-1.235A3.98 3.98 0 0 0 9.146 11H4c-1.103 0-2 .897-2 2v6c0 1.103.897 2 2 2zm0-8h5.146c.763 0 1.448.423 1.789 1.105l.447.895H7v2h6.014a.996.996 0 0 0 .442-.11l.003-.001.004-.002h.003l.002-.001h.004l.001-.001c.009.003.003-.001.003-.001.01 0 .002-.001.002-.001h.001l.002-.001.003-.001.002-.001.002-.001.003-.001.002-.001c.003 0 .001-.001.002-.001l.003-.002.002-.001.002-.001.003-.001.002-.001h.001l.002-.001h.001l.002-.001.002-.001c.009-.001.003-.001.003-.001l.002-.001a.915.915 0 0 0 .11-.078l4.146-3.317c.262-.208.623-.273.94-.167l.557.186-4.133 4.823a2.029 2.029 0 0 1-1.52.688H4v-6zM16 2h-.017c-.163.002-1.006.039-1.983.705-.951-.648-1.774-.7-1.968-.704L12.002 2h-.004c-.801 0-1.555.313-2.119.878C9.313 3.445 9 4.198 9 5s.313 1.555.861 2.104l3.414 3.586a1.006 1.006 0 0 0 1.45-.001l3.396-3.568C18.688 6.555 19 5.802 19 5s-.313-1.555-.878-2.121A2.978 2.978 0 0 0 16.002 2H16zm1 3c0 .267-.104.518-.311.725L14 8.55l-2.707-2.843C11.104 5.518 11 5.267 11 5s.104-.518.294-.708A.977.977 0 0 1 11.979 4c.025.001.502.032 1.067.485.081.065.163.139.247.222l.707.707.707-.707c.084-.083.166-.157.247-.222.529-.425.976-.478 1.052-.484a.987.987 0 0 1 .701.292c.189.189.293.44.293.707z"/>
+                        </svg>
+                        <span>Donate</span>
+                    `;
+                    donateLink.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        window.open('https://github.com/sponsors/5rahim', '_blank');
                     });
+                    donateFooter.appendChild(donateLink);
+                    drawer.appendChild(donateFooter);
+                    // ----------------------------------------------------------------
 
-                    donateWrapper.appendChild(donateBtn);
-                    drawer.appendChild(donateWrapper);
                     document.body.appendChild(drawer);
                     tagDonateButtons();
 
@@ -251,7 +250,8 @@ object UISettingsPatch {
                     tab.dataset.seanimeOwned = 'true';
                     tab.style.cssText = [
                         'position:fixed','left:0','top:50%','transform:translateY(-50%)',
-                        'z-index:1000','width:20px','height:56px',
+                        'z-index:10001',  // increased from 1000
+                        'width:20px','height:56px',
                         'background:rgba(255,255,255,0.07)',
                         'backdrop-filter:blur(12px)','-webkit-backdrop-filter:blur(12px)',
                         'border:1px solid rgba(255,255,255,0.10)','border-left:none',
@@ -374,29 +374,19 @@ object UISettingsPatch {
                     }, 200);
                 }
 
-                /*
-                 * ── sync: single source of truth ──
-                 * Original buttons in DOM  →  show floating bar (build if needed).
-                 * Original buttons gone    →  remove floating bar.
-                 * This naturally handles modals, tab switches, and navigation without
-                 * any explicit overlay detection.
-                 */
                 function sync() {
                     if (!isPhone() || !isSettingsPage()) { removeBar(); return; }
 
                     var found = findActionBar();
                     if (!found) { removeBar(); return; }
 
-                    /* Tag the original so it stays invisible */
                     ensureHideStyle();
                     if (!found.container.hasAttribute(TAG_ATTR)) {
                         found.container.setAttribute(TAG_ATTR, 'true');
                     }
 
-                    /* Bar already present — nothing more to do */
                     if (document.getElementById(BAR_ID)) return;
 
-                    /* ── Build the floating bar ── */
                     var bar = document.createElement('div');
                     bar.id = BAR_ID;
                     bar.style.cssText = [
@@ -413,7 +403,6 @@ object UISettingsPatch {
                         'transition:opacity 0.2s ease'
                     ].join(';');
 
-                    /* ─ Reset All: frosted-glass pill ─ */
                     var resetPill = document.createElement('button');
                     resetPill.textContent = 'Reset all';
                     resetPill.style.cssText = [
@@ -440,7 +429,6 @@ object UISettingsPatch {
                         }
                     });
 
-                    /* ─ Save: dark green button, no glow ─ */
                     var saveBtn = document.createElement('button');
                     saveBtn.textContent = 'Save';
                     saveBtn.style.cssText = [
@@ -477,10 +465,8 @@ object UISettingsPatch {
                     requestAnimationFrame(function() { bar.style.opacity = '1'; });
                 }
 
-                /* ── Initial sync ── */
                 sync();
 
-                /* ── MutationObserver: re-sync on every DOM change ── */
                 var syncTimer = null;
                 new MutationObserver(function() {
                     if (syncTimer) return;
@@ -490,7 +476,6 @@ object UISettingsPatch {
                     }, 80);
                 }).observe(document.body, { childList: true, subtree: true });
 
-                /* ── SPA navigation ── */
                 var lastHref = window.location.href;
                 setInterval(function() {
                     if (window.location.href !== lastHref) {
@@ -501,7 +486,6 @@ object UISettingsPatch {
                     }
                 }, 300);
 
-                /* ── Resize ── */
                 window.addEventListener('resize', sync);
             })();
         """.trimIndent()
