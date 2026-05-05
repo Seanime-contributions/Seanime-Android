@@ -65,10 +65,12 @@
 
 - [Seanime Extensions](https://github.com/Pal-droid/seanime-providers)
 
----
+--- 
 
 <h2 align="center">More info regarding the project</h2>
 <p align="center">
-  <a href="https://github.com/5rahim/Seanime">Official Seanime repo</a>
+  <a href="https://github.com/5rahim/Seanime">Official Seanime repo</a> •
   <a href="https://seanime.app/docs">Official Seanime documentation</a>
 </p>
+
+> 💬 Need help? Feel free to [DM me on Discord!](https://discord.com/users/1254072406667169855)
